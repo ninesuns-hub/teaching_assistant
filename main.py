@@ -17,7 +17,7 @@ HELP_TEXT = """
 
 def run() -> None:
     print("=" * 48)
-    print("    离散数学智能助教  v0.1  (纯对话版)")
+    print("    离散数学智能助教")
     print("=" * 48)
     print('输入 "help" 查看可用指令\n')
 
