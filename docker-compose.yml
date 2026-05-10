@@ -1,0 +1,20 @@
+services:
+  backend:
+    build: ./backend
+    container_name: discrete-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data  # 持久化数据库
+    env_file:
+      - ./backend/.env
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: discrete-frontend
+    ports:
+      - "80:80"  # 生产环境使用 80 端口
+    depends_on:
+      - backend
+    restart: always
