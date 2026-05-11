@@ -10,15 +10,15 @@
 
 ## 📋 必需配置步骤
 
-### 1. 启用 GitHub Pages
+### 1. 启用 GitHub Pages 服务设置
+
+这个报错是因为之前在 Settings 里选了 `Deploy from a branch` 导致的，而我们的自动化脚本（像你之前项目一样）采用的是更高级的 **GitHub Actions** 直接部署方式。
 
 1. 进入你的 GitHub 仓库
 2. 点击 **Settings** → **Pages**
 3. 在 "Build and deployment" 中：
-   - Source 选择：**Deploy from a branch**
-   - Branch 选择：**gh-pages**
-   - Folder 选择：**/ (root)**
-4. 点击 **Save**
+   - Source 请选择：**GitHub Actions** (不要选 "Deploy from a branch"！！！)
+4. (GitHub有可能会提示你配置，不需要再配了，我们的 yaml 已经写好了)
 
 ### 2. 配置 Vite Base 路径（如果需要）
 
