@@ -1,3 +1,4 @@
 [submodule "backend/agent_core"]
 	path = backend/agent_core
 	url = https://github.com/ninesuns-hub/agent_backend.git
+	branch = main
