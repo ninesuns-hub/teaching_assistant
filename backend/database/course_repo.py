@@ -1,10 +1,13 @@
 import sqlite3
 import os
-from app.config.settings import settings
+import logging
+from agent_core.config.settings import settings
 
+logger = logging.getLogger(__name__)
 
 def init_db() -> None:
     os.makedirs(os.path.dirname(settings.SQLITE_DB_PATH), exist_ok=True)
+    logger.info(f"初始化 SQLite 数据库: {settings.SQLITE_DB_PATH}")
     conn = sqlite3.connect(settings.SQLITE_DB_PATH)
     cursor = conn.cursor()
 

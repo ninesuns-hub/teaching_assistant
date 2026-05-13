@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.interfaces.api.routes import router as chat_router
+from app.utils.logger import setup_logger
 import uvicorn
+
+# 初始化全局日志
+setup_logger()
 
 app = FastAPI(title="Discrete Math Tutor API")
 
