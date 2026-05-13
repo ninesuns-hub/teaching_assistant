@@ -21,7 +21,6 @@ def init_db() -> None:
 
     cursor.execute("SELECT COUNT(*) FROM course_info")
     if cursor.fetchone()[0] == 0:
-        # 这里保留原有的 sample_data 逻辑，但为了简洁，我只写出结构，实际内容从原文件复制
         from .sample_data import SAMPLE_COURSE_DATA
         cursor.executemany(
             "INSERT INTO course_info (category, keywords, question, answer) VALUES (?, ?, ?, ?)",
