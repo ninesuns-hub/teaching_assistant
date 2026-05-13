@@ -1,0 +1,3 @@
+[submodule "agent_master"]
+	path = agent_master
+	url = https://github.com/ninesuns-hub/agent_backend.git
