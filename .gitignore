@@ -18,3 +18,9 @@ Thumbs.db
 
 # Project specific
 backend/data/vector_store/
+backend/data/qdrant_storage/
+backend/data/processed/
+backend/data/*.json
+backend/data/*.db
+backend/data/*.log
+backend/agent_core/config/.env
