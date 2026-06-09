@@ -264,13 +264,31 @@ function App() {
     setInput('')
     setIsSending(true)
     
+    // 创建一个空的助手消息占位
+    const assistantMessage = { role: 'assistant', content: '' }
+    setMessages(prev => [...prev, assistantMessage])
+    
     try {
-      const response = await sendChatMessage({ message: userMessage.content })
-      const assistantMessage = { role: 'assistant', content: response.reply }
-      setMessages(prev => [...prev, assistantMessage])
+      await sendChatMessage({ message: userMessage.content }, (chunk) => {
+        setMessages(prev => {
+          const newMessages = [...prev]
+          const lastMsg = newMessages[newMessages.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant') {
+            lastMsg.content += chunk
+          }
+          return newMessages
+        })
+      })
     } catch (err) { 
       console.error(err)
-      setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，发生了错误，请稍后再试。' }])
+      setMessages(prev => {
+        const newMessages = [...prev]
+        const lastMsg = newMessages[newMessages.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.content = '抱歉，发生了错误，请稍后再试。'
+        }
+        return newMessages
+      })
     } finally { 
       setIsSending(false) 
     }
@@ -376,7 +394,12 @@ function App() {
             </div>
           </div>
 
-          <footer className="scene-quote-footer" style={{ opacity: quoteOpacity, transform: `translateY(${scrollPos * 50}px)` }}>
+          <footer className="scene-quote-footer" style={{ 
+            opacity: messages.length > 0 ? 0 : quoteOpacity, 
+            transform: `translateY(${scrollPos * 50}px)`,
+            visibility: messages.length > 0 ? 'hidden' : 'visible',
+            pointerEvents: 'none'
+          }}>
             <blockquote className="scene-quote">
               <p>{activeQuote.text}</p>
               <cite>- {activeQuote.author}</cite>

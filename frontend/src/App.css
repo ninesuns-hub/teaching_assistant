@@ -241,6 +241,7 @@ body {
   /* 移除之前的 height: 70vh，让它根据内容自动居中 */
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 20;
+  margin-top: 40px; /* 初始状态向下挪动一点 */
 }
 
 .messages-list {
