@@ -29,7 +29,7 @@ def init_db() -> None:
             "INSERT INTO course_info (category, keywords, question, answer) VALUES (?, ?, ?, ?)",
             SAMPLE_COURSE_DATA
         )
-        print(f"[SQLite] 课程数据初始化完成，共写入 {len(SAMPLE_COURSE_DATA)} 条记录")
+        logger.info(f"[SQLite] 课程数据初始化完成，共写入 {len(SAMPLE_COURSE_DATA)} 条记录")
 
     conn.commit()
     conn.close()
