@@ -52,15 +52,22 @@ class DataManager:
         手动触发单个文件的 RAG 入库
         """
         logger.info(f"开始处理文件入库: {file_path}")
-        if file_path.lower().endswith((".pptx", ".ppsx")):
+        ext = file_path.lower()
+        chunks = []
+        
+        if ext.endswith((".pptx", ".ppsx")):
             chunks = self.processor.pptx_parser.parse(file_path)
-            if chunks:
-                self.searcher.add_documents(chunks)
-                logger.info(f"文件 {file_path} 已成功集成至 RAG 系统")
-            else:
-                logger.warning(f"文件 {file_path} 解析结果为空")
+        elif ext.endswith(".pdf"):
+            chunks = self.processor.pdf_parser.parse(file_path)
         else:
             logger.warning(f"暂不支持的文件格式: {file_path}")
+            return
+
+        if chunks:
+            self.searcher.add_documents(chunks)
+            logger.info(f"文件 {file_path} 已成功集成至 RAG 系统")
+        else:
+            logger.warning(f"文件 {file_path} 解析结果为空")
 
     def get_all_course_files(self) -> List[str]:
         """获取所有已上传的课程文件列表"""
@@ -69,13 +76,25 @@ class DataManager:
         return os.listdir(settings.COURSE_ASSETS_DIR)
 
     def delete_course_file(self, filename: str):
-        """删除课程文件（注意：目前未实现从向量库中删除）"""
+        """删除课程文件（注意：目前未实现从向量库中单个删除）"""
         target_path = os.path.join(settings.COURSE_ASSETS_DIR, filename)
         if os.path.exists(target_path):
             os.remove(target_path)
             logger.info(f"已删除文件: {target_path}")
             return True
         return False
+
+    def clear_all_data(self):
+        """
+        清空所有已入库的数据索引
+        """
+        self.searcher.clear_all()
+        # 同时清理处理后的中间文件
+        if os.path.exists(settings.CHUNKS_DIR):
+            for f in os.listdir(settings.CHUNKS_DIR):
+                if f.endswith(".md") or f.endswith(".json"):
+                    os.remove(os.path.join(settings.CHUNKS_DIR, f))
+        logger.info("所有本地缓存和索引已清理完毕")
 
 # 全局单例
 data_manager = DataManager()

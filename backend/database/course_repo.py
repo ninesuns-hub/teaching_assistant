@@ -35,24 +35,37 @@ def init_db() -> None:
     conn.close()
 
 
-def query_course_admin(user_question: str) -> str | None:
+def query_course_admin(query_str: str) -> str | None:
+    """
+    查询课程行政信息。
+    支持按类别(category)精准查询或按关键词(keywords)模糊查询。
+    """
     conn = sqlite3.connect(settings.SQLITE_DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT keywords, answer FROM course_info")
+    cursor.execute("SELECT category, keywords, answer FROM course_info")
     rows = cursor.fetchall()
     conn.close()
 
+    query_str = query_str.lower().strip()
     matched = []
-    for keywords_str, answer in rows:
-        keywords = [kw.strip() for kw in keywords_str.split(",")]
-        hit_count = sum(1 for kw in keywords if kw and kw in user_question)
-        max_kw_len = max([len(kw) for kw in keywords if kw and kw in user_question] or [0])
 
+    for category, keywords_str, answer in rows:
+        # 1. 尝试类别精准匹配
+        if query_str == category.lower():
+            matched.append((100, len(category), answer)) # 类别匹配给予最高权重
+            continue
+
+        # 2. 尝试关键词匹配
+        keywords = [kw.strip().lower() for kw in keywords_str.split(",")]
+        # 只要关键词在查询串中，或者查询串在关键词中（模糊匹配）
+        hit_count = sum(1 for kw in keywords if kw and (kw in query_str or query_str in kw))
         if hit_count > 0:
+            max_kw_len = max([len(kw) for kw in keywords if kw and (kw in query_str or query_str in kw)] or [0])
             matched.append((hit_count, max_kw_len, answer))
 
     if not matched:
         return None
 
+    # 按权重排序：类别匹配优先，其次是关键词命中数，最后是匹配长度
     matched.sort(key=lambda x: (x[0], x[1]), reverse=True)
     return "\n\n---\n\n".join(item[2] for item in matched)
