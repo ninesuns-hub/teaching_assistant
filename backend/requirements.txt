@@ -7,3 +7,7 @@ fastapi
 uvicorn
 pydantic
 pydantic-settings
+python-multipart
+jieba
+rank_bm25
+qdrant-client

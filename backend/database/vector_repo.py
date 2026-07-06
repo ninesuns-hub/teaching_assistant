@@ -59,6 +59,15 @@ def init_collection():
             vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE),
         )
 
+def clear_collection() -> None:
+    client = get_qdrant_client()
+    collections = client.get_collections().collections
+    exists = any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections)
+    if exists:
+        logger.info(f"删除 Qdrant 集合: {settings.QDRANT_COLLECTION_NAME}")
+        client.delete_collection(collection_name=settings.QDRANT_COLLECTION_NAME)
+    init_collection()
+
 def add_documents(chunks: List[Dict[str, Any]]) -> None:
     if not chunks:
         return

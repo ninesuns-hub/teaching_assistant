@@ -271,12 +271,17 @@ function App() {
     try {
       await sendChatMessage({ message: userMessage.content }, (chunk) => {
         setMessages(prev => {
-          const newMessages = [...prev]
-          const lastMsg = newMessages[newMessages.length - 1]
-          if (lastMsg && lastMsg.role === 'assistant') {
-            lastMsg.content += chunk
+          const lastIndex = prev.length - 1
+          if (lastIndex >= 0 && prev[lastIndex].role === 'assistant') {
+            // 创建一个全新的数组和全新的消息对象，确保不可变性
+            const newMessages = [...prev]
+            newMessages[lastIndex] = {
+              ...newMessages[lastIndex],
+              content: newMessages[lastIndex].content + chunk
+            }
+            return newMessages
           }
-          return newMessages
+          return prev
         })
       })
     } catch (err) { 
