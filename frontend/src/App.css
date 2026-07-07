@@ -15,7 +15,6 @@ body {
 .app-container {
   height: 100vh;
   overflow-y: auto;
-  scroll-snap-type: y mandatory;
   scroll-behavior: smooth;
 }
 
@@ -26,12 +25,12 @@ body {
   background: #000;
   color: var(--text-main);
   transition: color 0.8s ease;
+  min-height: 100vh;
 }
 
 .section {
-  height: 100vh;
+  min-height: 100vh;
   width: 100%;
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -224,9 +223,14 @@ body {
 
 /* Chat Section */
 .section-chat {
-  justify-content: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* 核心内容垂直居中 */
   align-items: center;
-  gap: 40px;
+  min-height: 100vh;
+  padding: 80px 20px;
+  box-sizing: border-box;
+  overflow: hidden; /* 彻底禁用该区域的外部滚动 */
 }
 
 .chat-shell {
@@ -234,9 +238,91 @@ body {
   width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 40px;
-  transition: all 0.5s ease;
+  /* 移除之前的 height: 70vh，让它根据内容自动居中 */
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 20;
+  margin-top: 40px; /* 初始状态向下挪动一点 */
+}
+
+.messages-list {
+  width: 100%;
+  /* 初始状态：完全收起 */
+  height: 0;
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 24px;
+  backdrop-filter: blur(10px);
+  border: 1px solid transparent;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1); /* 更平滑的展开曲线 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.messages-list.has-messages {
+  height: 60vh;      /* 固定高度 */
+  max-height: 60vh;  /* 覆盖初始的 0，确保高度生效 */
+  opacity: 1;
+  padding: 24px;
+  margin-bottom: 24px;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.messages-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+
+.messages-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.message-item {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+}
+
+.message-item.user {
+  align-self: flex-end;
+}
+
+.message-item.assistant {
+  align-self: flex-start;
+}
+
+.message-content {
+  padding: 12px 18px;
+  border-radius: 18px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.user .message-content {
+  background: var(--text-main);
+  color: var(--bg-main);
+  border-bottom-right-radius: 4px;
+}
+
+.assistant .message-content {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .chat-title { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px; }
@@ -253,6 +339,7 @@ body {
   display: flex;
   gap: 12px;
   backdrop-filter: blur(25px);
+  overflow: hidden; /* 确保内部元素不会溢出显示奇怪的滚动条 */
 }
 
 .composer textarea {
@@ -264,6 +351,19 @@ body {
   resize: none;
   outline: none;
   padding: 8px 0;
+  /* 极致隐藏滚动条和所有浏览器原生控件 */
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  overflow: hidden !important;
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE/Edge */
+}
+
+.composer textarea::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .composer button {
@@ -380,9 +480,14 @@ body {
 
 /* Footer Quote */
 .scene-quote-footer {
-  padding: 40px 0;
+  position: absolute;
+  bottom: 60px; /* 固定在距离底部一定距离 */
+  left: 0;
+  right: 0;
   text-align: center;
   transition: all 0.5s ease;
+  z-index: 10;
+  pointer-events: none; /* 防止遮挡点击 */
 }
 
 .scene-quote {
