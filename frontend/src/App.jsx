@@ -1,12 +1,13 @@
-﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import './App.css'
 import { sendChatMessage } from './api/chat'
+import MarkdownMessage from './components/MarkdownMessage'
 import logoImg from './assets/logo.png'
 
 const SCENE_OPTIONS = [
-  { key: 'night', label: { en: 'Starry Night', zh: '鏄熺┖榛戝' }, angle: 0 },
-  { key: 'day', label: { en: 'Blue Sky', zh: '纰ф按钃濆ぉ' }, angle: 120 },
-  { key: 'sunset', label: { en: 'Sunset', zh: '钀芥棩浣欐櫀' }, angle: 240 },
+  { key: 'night', label: { en: 'Starry Night', zh: '星空黑夜' }, angle: 0 },
+  { key: 'day', label: { en: 'Blue Sky', zh: '碧水蓝天' }, angle: 120 },
+  { key: 'sunset', label: { en: 'Sunset', zh: '落日余晖' }, angle: 240 },
 ]
 
 const LineIcon = ({ type }) => {
@@ -67,39 +68,39 @@ const TRANSLATIONS = {
     }
   },
   zh: {
-    brand: '绂绘暎鏁板鍔╂暀',
-    settings: '璁剧疆',
-    login: '鐧诲綍',
-    signup: '娉ㄥ唽',
-    title: '绂绘暎鏁板鍔╂暀',
-    placeholder: '杈撳叆浣犵殑绂绘暎鏁板闂...',
-    send: '鍙戦€?,
+    brand: '离散数学助教',
+    settings: '设置',
+    login: '登录',
+    signup: '注册',
+    title: '离散数学助教',
+    placeholder: '输入你的离散数学问题...',
+    send: '发送',
     sending: '...',
-    scrollDown: '鍚戜笅婊戝姩鏌ョ湅璧勬簮',
-    resourcesTitle: '瀛︿範璧勬簮',
-    view: '鏌ョ湅',
-    language: '璇█',
-    currentScene: '褰撳墠鍦烘櫙',
-    resourceChapter: '绂绘暎鏁板 绗竴绔?,
-    resourceDesc: '娑电洊鍩烘湰姒傚康涓庤瘉鏄庢柟娉曠殑鍏ㄩ潰姒傝堪銆?,
+    scrollDown: '向下滑动查看资源',
+    resourcesTitle: '学习资源',
+    view: '查看',
+    language: '语言',
+    currentScene: '当前场景',
+    resourceChapter: '离散数学 第一章',
+    resourceDesc: '涵盖基本概念与证明方法的全面概述。',
     filters: {
-      All: '鍏ㄩ儴',
-      Slides: '璇句欢',
-      Notes: '绗旇',
-      Practice: '缁冧範',
-      Books: '涔︾睄'
+      All: '全部',
+      Slides: '课件',
+      Notes: '笔记',
+      Practice: '练习',
+      Books: '书籍'
     },
     auth: {
-      loginTitle: '娆㈣繋鍥炴潵',
-      signupTitle: '鍒涘缓璐﹀彿',
-      email: '閭',
-      password: '瀵嗙爜',
-      confirmPassword: '纭瀵嗙爜',
-      loginBtn: '鐧诲綍',
-      signupBtn: '娉ㄥ唽',
-      noAccount: '杩樻病鏈夎处鍙凤紵',
-      hasAccount: '宸叉湁璐﹀彿锛?,
-      backToHome: '杩斿洖棣栭〉'
+      loginTitle: '欢迎回来',
+      signupTitle: '创建账号',
+      email: '邮箱',
+      password: '密码',
+      confirmPassword: '确认密码',
+      loginBtn: '登录',
+      signupBtn: '注册',
+      noAccount: '还没有账号？',
+      hasAccount: '已有账号？',
+      backToHome: '返回首页'
     }
   }
 }
@@ -107,19 +108,20 @@ const TRANSLATIONS = {
 const SCENE_QUOTES = {
   day: {
     en: { text: 'All of mathematics... finds the most secret truths and puts them in the right light.', author: 'Leonhard Euler' },
-    zh: { text: '鎵€鏈夌殑鏁板鈥︹€﹂兘鑳藉彂鐜版渶闅愮鐨勭湡鐞嗭紝骞跺皢鍏剁疆浜庢纭殑鍏夌嚎涓嬨€?, author: '娆ф媺' }
+    zh: { text: '所有的数学……都能发现最隐秘的真理，并将其置于正确的光线下。', author: '欧拉' }
   },
   night: {
     en: { text: 'There are faint stars in the night sky that you can see, but only if you look to the side of where they shine... Maybe truth is just like that.', author: 'Kurt Godel' },
-    zh: { text: '澶滅┖涓湁浜涘井寮辩殑鏄熷厜锛屽彧鏈夊綋浣犱晶杩囧ご鍘荤湅瀹冧滑鏃舵墠鑳界湅瑙佲€︹€︿篃璁哥湡鐞嗕篃鏄姝ゃ€?, author: '鍝ュ痉灏? }
+    zh: { text: '夜空中有些微弱的星光，只有当你侧过头去看它们时才能看见……也许真理也是如此。', author: '哥德尔' }
   },
   sunset: {
     en: { text: 'Thought is only a flash between two long nights, but this flash is everything.', author: 'Henri Poincare' },
-    zh: { text: '鎬濇兂鍙槸涓ゆ婕极闀垮涔嬮棿鐨勪竴閬撻棯鐢碉紝浣嗚繖閬撻棯鐢靛氨鏄竴鍒囥€?, author: '浜ㄥ埄路搴炲姞鑾? }
+    zh: { text: '思想只是两次漫漫长夜之间的一道闪电，但这道闪电就是一切。', author: '亨利·庞加莱' }
   },
 }
 
 const RESOURCE_FILTERS = ['All', 'Slides', 'Notes', 'Practice', 'Books']
+const INTRO_PROMPT = '你好，请你自我介绍一下'
 
 function getBeijingHour() {
   const hourPart = new Intl.DateTimeFormat('en-US', {
@@ -149,34 +151,30 @@ function App() {
   const [activeFilter, setActiveFilter] = useState('All')
   const [scrollPos, setScrollPos] = useState(0)
 
-  const [dialRotation, setDialRotation] = useState(0)
+  const [dialRotation, setDialRotation] = useState(() => {
+    const currentSceneKey = getSceneByHour(getBeijingHour())
+    const targetScene = SCENE_OPTIONS.find(s => s.key === currentSceneKey)
+    return targetScene ? -targetScene.angle : 0
+  })
   const [isDragging, setIsDragging] = useState(false)
   const dragRef = useRef({ startX: 0, startRot: 0 })
+  const introRequestedRef = useRef(false)
   const containerRef = useRef(null)
   const messagesEndRef = useRef(null)
 
   const t = TRANSLATIONS[language]
 
-  // 鑷姩婊氬姩鍒版渶鏂版秷鎭?
+  // 自动滚动到最新消息
   useEffect(() => {
     if (messagesEndRef.current) {
-      // 鍏抽敭锛氬彧鍦ㄦ秷鎭垪琛ㄥ鍣ㄥ唴婊氬姩锛屼笉褰卞搷鍏ㄥ眬
+      // 关键：只在消息列表容器内滚动，不影响全局
       messagesEndRef.current.scrollIntoView({
         behavior: 'smooth',
-        block: 'nearest', // 閬垮厤婊氬姩鏁翠釜椤甸潰
+        block: 'nearest', // 避免滚动整个页面
         inline: 'start'
       })
     }
   }, [messages])
-
-  // Initialize dial based on current time
-  useEffect(() => {
-    const currentSceneKey = getSceneByHour(getBeijingHour())
-    const targetScene = SCENE_OPTIONS.find(s => s.key === currentSceneKey)
-    if (targetScene) {
-      setDialRotation(-targetScene.angle)
-    }
-  }, [])
 
   // Track scroll position
   useEffect(() => {
@@ -255,25 +253,27 @@ function App() {
     }
   }, [isDragging, dialRotation])
 
-  const handleSend = async (e) => {
-    e.preventDefault()
-    if (!input.trim() || isSending) return
+  const streamAssistantReply = useCallback(async (message, { includeUserMessage = false } = {}) => {
+    const trimmedMessage = message.trim()
+    if (!trimmedMessage) return
 
-    const userMessage = { role: 'user', content: input.trim() }
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
+    if (includeUserMessage) {
+      const userMessage = { role: 'user', content: trimmedMessage }
+      setMessages(prev => [...prev, userMessage])
+    }
+
     setIsSending(true)
 
-    // 鍒涘缓涓€涓┖鐨勫姪鎵嬫秷鎭崰浣?
+    // 创建一个空的助手消息占位
     const assistantMessage = { role: 'assistant', content: '' }
     setMessages(prev => [...prev, assistantMessage])
 
     try {
-      await sendChatMessage({ message: userMessage.content }, (chunk) => {
+      await sendChatMessage({ message: trimmedMessage }, (chunk) => {
         setMessages(prev => {
           const lastIndex = prev.length - 1
           if (lastIndex >= 0 && prev[lastIndex].role === 'assistant') {
-            // 鍒涘缓涓€涓叏鏂扮殑鏁扮粍鍜屽叏鏂扮殑娑堟伅瀵硅薄锛岀‘淇濅笉鍙彉鎬?
+            // 创建一个全新的数组和全新的消息对象，确保不可变性
             const newMessages = [...prev]
             newMessages[lastIndex] = {
               ...newMessages[lastIndex],
@@ -290,13 +290,29 @@ function App() {
         const newMessages = [...prev]
         const lastMsg = newMessages[newMessages.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.content = '鎶辨瓑锛屽彂鐢熶簡閿欒锛岃绋嶅悗鍐嶈瘯銆?
+          lastMsg.content = '抱歉，发生了错误，请稍后再试。'
         }
         return newMessages
       })
     } finally {
       setIsSending(false)
     }
+  }, [])
+
+  useEffect(() => {
+    if (introRequestedRef.current || messages.length > 0) return
+
+    introRequestedRef.current = true
+    streamAssistantReply(INTRO_PROMPT)
+  }, [messages.length, streamAssistantReply])
+
+  const handleSend = async (e) => {
+    e.preventDefault()
+    if (!input.trim() || isSending) return
+
+    const message = input.trim()
+    setInput('')
+    await streamAssistantReply(message, { includeUserMessage: true })
   }
 
   const handleKeyDown = (e) => {
@@ -334,7 +350,7 @@ function App() {
                     <span>{t.language}</span>
                     <div className="lang-switch">
                       <button className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')}>EN</button>
-                      <button className={language === 'zh' ? 'active' : ''} onClick={() => setLanguage('zh')}>涓枃</button>
+                      <button className={language === 'zh' ? 'active' : ''} onClick={() => setLanguage('zh')}>中文</button>
                     </div>
                   </div>
                 </div>
@@ -357,7 +373,13 @@ function App() {
             <div className={`messages-list ${messages.length > 0 ? 'has-messages' : ''}`}>
               {messages.map((msg, idx) => (
                 <div key={idx} className={`message-item ${msg.role}`}>
-                  <div className="message-content">{msg.content}</div>
+                  <div className="message-content">
+                    {msg.role === 'assistant' ? (
+                      <MarkdownMessage content={msg.content} />
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
                 </div>
               ))}
               <div ref={messagesEndRef} />
@@ -464,12 +486,12 @@ function App() {
               </div>
               <div className="form-group">
                 <label>{t.auth.password}</label>
-                <input type="password" placeholder="鈥⑩€⑩€⑩€⑩€⑩€⑩€⑩€? />
+                <input type="password" placeholder="••••••••" />
               </div>
               {authModal === 'signup' && (
                 <div className="form-group">
                   <label>{t.auth.confirmPassword}</label>
-                  <input type="password" placeholder="鈥⑩€⑩€⑩€⑩€⑩€⑩€⑩€? />
+                  <input type="password" placeholder="••••••••" />
                 </div>
               )}
 

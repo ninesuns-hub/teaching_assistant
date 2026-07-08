@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pptx import Presentation
 import sys
 
