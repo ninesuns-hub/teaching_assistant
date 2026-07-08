@@ -1,4 +1,4 @@
-﻿import os
+import os
 import uuid
 import logging
 from typing import List, Dict, Any
@@ -9,7 +9,7 @@ from agent_core.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# 鈹€鈹€ OpenAI 瀹㈡埛绔?(涓撶敤 Embedding) 鈹€鈹€
+# ── OpenAI 客户端 (专用 Embedding) ──
 _embed_client = None
 
 def get_embed_client():
@@ -21,13 +21,13 @@ def get_embed_client():
         )
     return _embed_client
 
-# 鈹€鈹€ Qdrant 瀹㈡埛绔?鈹€鈹€
+# ── Qdrant 客户端 ──
 _qdrant_client = None
 
 def get_qdrant_client():
     global _qdrant_client
     if _qdrant_client is None:
-        # 濡傛灉鎻愪緵浜?QDRANT_PATH锛屽垯浣跨敤鏈湴瀛樺偍妯″紡
+        # 如果提供了 QDRANT_PATH，则使用本地存储模式
         if settings.QDRANT_PATH:
             _qdrant_client = QdrantClient(path=settings.QDRANT_PATH)
         else:
@@ -44,7 +44,7 @@ def _embed(texts: List[str]) -> List[List[float]]:
         return [data.embedding for data in response.data]
     except Exception as e:
         logger.error(f"Embedding API Error: {e}")
-        # 鍏滃簳锛氳繑鍥?1536 缁撮浂鍚戦噺 (text-embedding-3-small)
+        # 兜底：返回 1536 维零向量 (text-embedding-3-small)
         return [[0.0] * 1536 for _ in texts]
 
 def init_collection():
@@ -53,7 +53,7 @@ def init_collection():
     exists = any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections)
 
     if not exists:
-        logger.info(f"鍒涘缓 Qdrant 闆嗗悎: {settings.QDRANT_COLLECTION_NAME}")
+        logger.info(f"创建 Qdrant 集合: {settings.QDRANT_COLLECTION_NAME}")
         client.create_collection(
             collection_name=settings.QDRANT_COLLECTION_NAME,
             vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE),
@@ -64,7 +64,7 @@ def clear_collection() -> None:
     collections = client.get_collections().collections
     exists = any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections)
     if exists:
-        logger.info(f"鍒犻櫎 Qdrant 闆嗗悎: {settings.QDRANT_COLLECTION_NAME}")
+        logger.info(f"删除 Qdrant 集合: {settings.QDRANT_COLLECTION_NAME}")
         client.delete_collection(collection_name=settings.QDRANT_COLLECTION_NAME)
     init_collection()
 
@@ -80,14 +80,14 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
 
     points = []
     for i, chunk in enumerate(chunks):
-        # 缁熶竴鍏冩暟鎹牸寮?
+        # 统一元数据格式
         payload = {
             "text": chunk["text"],
             "source_file": chunk["source_file"],
             "source_type": chunk["source_type"],
             "chapter": chunk.get("chapter", ""),
             "page": str(chunk.get("page", "")),
-            "metadata": chunk.get("metadata", {}) # 棰濆鍏冩暟鎹?
+            "metadata": chunk.get("metadata", {}) # 额外元数据
         }
 
         points.append(models.PointStruct(
@@ -100,7 +100,7 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
         collection_name=settings.QDRANT_COLLECTION_NAME,
         points=points
     )
-    logger.info(f"鎴愬姛鍚?Qdrant 鍐欏叆 {len(points)} 鏉℃暟鎹?)
+    logger.info(f"成功向 Qdrant 写入 {len(points)} 条数据")
 
 def query(question: str, source_type: str = None, top_k: int = None) -> List[Dict[str, Any]]:
     client = get_qdrant_client()
@@ -110,7 +110,7 @@ def query(question: str, source_type: str = None, top_k: int = None) -> List[Dic
 
     n_results = top_k if top_k is not None else settings.TOP_K
 
-    # 鏋勯€犺繃婊ゅ櫒
+    # 构造过滤器
     query_filter = None
     if source_type:
         query_filter = models.Filter(

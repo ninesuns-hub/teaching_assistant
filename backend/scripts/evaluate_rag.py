@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import re
 import json
@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# 纭繚鍙互瀵煎叆 backend 鐩綍涓嬬殑妯″潡
+# 确保可以导入 backend 目录下的模块
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.append(backend_dir)
@@ -18,11 +18,11 @@ from agent_core.rag import HybridSearcher
 from agent_core.config.settings import settings
 from database.course_repo import query_course_admin, init_db
 
-# 閰嶇疆鏃ュ織
+# 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# 鍔犺浇鐜鍙橀噺
+# 加载环境变量
 env_path = os.path.join(backend_dir, 'agent_core', 'config', '.env')
 load_dotenv(env_path)
 
@@ -36,26 +36,26 @@ class LLMAsAJudge:
 
     def judge(self, question: str, expected_content: str, actual_answer: str, retrieved_context: str) -> Dict[str, Any]:
         prompt = f"""
-浣犳槸涓€浣嶇鏁ｆ暟瀛﹁绋嬬殑璧勬繁鍔╂暀锛岀幇鍦ㄩ渶瑕佷綘浣滀负涓€涓鍒わ紙LLM-as-a-Judge锛夛紝璇勪及 RAG 绯荤粺鐢熸垚鐨勫洖绛斻€?
+你是一位离散数学课程的资深助教，现在需要你作为一个裁判（LLM-as-a-Judge），评估 RAG 系统生成的回答。
 
-### 璇勪及鏍囧噯锛?
-1. **鍑嗙‘鎬?(Accuracy)**锛氬洖绛旀槸鍚﹀寘鍚簡鈥滄湡寰呭唴瀹光€濅腑鐨勬牳蹇冭鐐癸紵鏄惁瀛樺湪浜嬪疄鎬ч敊璇紵
-2. **瀹屾暣鎬?(Completeness)**锛氬洖绛旀槸鍚﹀畬鏁磋В鍐充簡闂锛?
-3. **妫€绱㈣川閲?(Retrieval Quality)**锛氱郴缁熸绱㈠埌鐨勫弬鑰冨唴瀹规槸鍚︿笌闂楂樺害鐩稿叧锛熸槸鍚︿负鍥炵瓟鎻愪緵浜嗘湁鍔涙敮鎾戯紵
-4. **蹇犲疄搴?(Faithfulness)**锛氬洖绛旀槸鍚﹀熀浜庢绱㈠埌鐨勫弬鑰冨唴瀹癸紵鏄惁瀛樺湪骞昏锛堢敓鎴愪簡鍙傝€冨唴瀹逛腑娌℃湁鐨勪俊鎭級锛?
+### 评估标准：
+1. **准确性 (Accuracy)**：回答是否包含了“期待内容”中的核心要点？是否存在事实性错误？
+2. **完整性 (Completeness)**：回答是否完整解决了问题？
+3. **检索质量 (Retrieval Quality)**：系统检索到的参考内容是否与问题高度相关？是否为回答提供了有力支撑？
+4. **忠实度 (Faithfulness)**：回答是否基于检索到的参考内容？是否存在幻觉（生成了参考内容中没有的信息）？
 
-### 杈撳叆淇℃伅锛?
-- **闂**: {question}
-- **鏈熷緟鍐呭 (Ground Truth)**: {expected_content}
-- **绯荤粺妫€绱㈠埌鐨勫弬鑰冨唴瀹?*:
-{retrieved_context if retrieved_context else "鏈绱㈠埌鍐呭"}
-- **绯荤粺鏈€缁堝洖绛?*: {actual_answer}
+### 输入信息：
+- **问题**: {question}
+- **期待内容 (Ground Truth)**: {expected_content}
+- **系统检索到的参考内容**:
+{retrieved_context if retrieved_context else "未检索到内容"}
+- **系统最终回答**: {actual_answer}
 
-### 杈撳嚭鏍煎紡 (璇峰姟蹇呰繑鍥?JSON 鏍煎紡):
+### 输出格式 (请务必返回 JSON 格式):
 {{
     "score": 0-10,
     "retrieval_score": 0-10,
-    "reasoning": "绠€瑕佽鏄庤瘎鍒嗙悊鐢憋紝蹇呴』璇勪环妫€绱㈠唴瀹圭殑鐩稿叧鎬у拰鍥炵瓟鐨勫繝瀹炲害",
+    "reasoning": "简要说明评分理由，必须评价检索内容的相关性和回答的忠实度",
     "is_pass": true/false
 }}
 """
@@ -63,7 +63,7 @@ class LLMAsAJudge:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "浣犳槸涓€涓弗璋ㄧ殑瀛︽湳璇勪及鍔╂墜銆?},
+                    {"role": "system", "content": "你是一个严谨的学术评估助手。"},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
@@ -71,20 +71,20 @@ class LLMAsAJudge:
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
-            logger.error(f"瑁佸垽璇勫垎澶辫触: {e}")
-            return {"score": 0, "reasoning": f"璇勫垎鍑洪敊: {str(e)}", "is_pass": False}
+            logger.error(f"裁判评分失败: {e}")
+            return {"score": 0, "reasoning": f"评分出错: {str(e)}", "is_pass": False}
 
 def parse_eval_set(file_path: str) -> List[Dict[str, str]]:
     if not os.path.exists(file_path):
-        logger.error(f"娴嬭瘎闆嗘枃浠朵笉瀛樺湪: {file_path}")
+        logger.error(f"测评集文件不存在: {file_path}")
         return []
 
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # 鍖归厤 ### N. 棰樼洰鍚?\n - 闂: ... \n - 鏈熷緟鍐呭: ... \n - 绮惧噯瀹氫綅: ...
+    # 匹配 ### N. 题目名 \n - 问题: ... \n - 期待内容: ... \n - 精准定位: ...
     cases = []
-    pattern = r"### .*?\n- \*\*闂\*\*: (.*?)\n- \*\*鏈熷緟鍐呭\*\*: (.*?)\n- \*\*绮惧噯瀹氫綅\*\*: (.*?)(?:\n|$)"
+    pattern = r"### .*?\n- \*\*问题\*\*: (.*?)\n- \*\*期待内容\*\*: (.*?)\n- \*\*精准定位\*\*: (.*?)(?:\n|$)"
     matches = re.findall(pattern, content, re.DOTALL)
 
     for m in matches:
@@ -97,7 +97,7 @@ def parse_eval_set(file_path: str) -> List[Dict[str, str]]:
     return cases
 
 async def run_evaluation():
-    # 1. 鍒濆鍖栫郴缁?
+    # 1. 初始化系统
     init_db()
     hybrid_searcher = HybridSearcher()
     tools = [
@@ -107,35 +107,35 @@ async def run_evaluation():
     agent = ReactAgent(config=settings, tools=tools)
     judge = LLMAsAJudge()
 
-    # 2. 鍔犺浇娴嬭瘎闆?
+    # 2. 加载测评集
     eval_file = os.path.join(backend_dir, 'storage', 'raw', 'assets', 'evaluation_set', 'discrete_math_eval_set.md')
     test_cases = parse_eval_set(eval_file)
 
     if not test_cases:
-        logger.error("鏈壘鍒颁换浣曟祴璇曠敤渚嬶紝璇锋鏌ヨВ鏋愰€昏緫鎴栨枃浠惰矾寰勩€?)
+        logger.error("未找到任何测试用例，请检查解析逻辑或文件路径。")
         return
 
     results = []
     total_score = 0
     pass_count = 0
 
-    logger.info(f"寮€濮嬫祴璇勶紝鍏?{len(test_cases)} 涓敤渚?..")
+    logger.info(f"开始测评，共 {len(test_cases)} 个用例...")
 
     for i, case in enumerate(test_cases):
-        logger.info(f"姝ｅ湪娴嬭瘯 [{i+1}/{len(test_cases)}]: {case['question'][:30]}...")
+        logger.info(f"正在测试 [{i+1}/{len(test_cases)}]: {case['question'][:30]}...")
 
-        # 鑾峰彇 Agent 鍥炵瓟
+        # 获取 Agent 回答
         actual_answer = ""
         try:
             for chunk in agent.stream_chat(case['question']):
                 actual_answer += chunk
         except Exception as e:
-            actual_answer = f"Agent 杩愯寮傚父: {str(e)}"
+            actual_answer = f"Agent 运行异常: {str(e)}"
 
-        # 鑾峰彇妫€绱㈠埌鐨勫弬鑰冨唴瀹?
+        # 获取检索到的参考内容
         retrieved_context = "\n---\n".join(agent.last_observations)
 
-        # 瑁佸垽璇勫垎
+        # 裁判评分
         evaluation = judge.judge(case['question'], case['expected'], actual_answer, retrieved_context)
 
         result = {
@@ -155,9 +155,9 @@ async def run_evaluation():
         if result["is_pass"]:
             pass_count += 1
 
-        logger.info(f"寰楀垎: {result['score']} | 鏄惁閫氳繃: {result['is_pass']}")
+        logger.info(f"得分: {result['score']} | 是否通过: {result['is_pass']}")
 
-    # 3. 鐢熸垚鎶ュ憡
+    # 3. 生成报告
     report_path = os.path.join(backend_dir, 'storage', 'raw', 'assets', 'evaluation_set', 'eval_report.json')
     summary = {
         "total_cases": len(test_cases),
@@ -170,8 +170,8 @@ async def run_evaluation():
     with open(report_path, 'w', encoding='utf-8') as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"娴嬭瘎瀹屾垚锛佹姤鍛婂凡淇濆瓨鑷? {report_path}")
-    logger.info(f"骞冲潎鍒? {summary['average_score']:.2f} | 閫氳繃鐜? {summary['pass_rate']}")
+    logger.info(f"测评完成！报告已保存至: {report_path}")
+    logger.info(f"平均分: {summary['average_score']:.2f} | 通过率: {summary['pass_rate']}")
 
 if __name__ == "__main__":
     import asyncio
