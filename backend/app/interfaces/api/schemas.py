@@ -155,3 +155,29 @@ class ClassFeedbackResponse(BaseModel):
     stats: dict
     student_count: int
     created_at: str
+
+
+class HomeworkResponse(BaseModel):
+    id: int
+    class_id: int
+    title: str
+    description: str | None = None
+    due_at: str | None = None
+    attachment_name: str | None = None
+    has_attachment: bool = False
+    created_at: str
+    submission_count: int = 0
+    my_submission: dict | None = None
+
+
+class HomeworkSubmissionResponse(BaseModel):
+    id: int
+    homework_id: int
+    student_id: int
+    student_name: str | None = None
+    content: str | None = None
+    filename: str | None = None
+    file_type: str | None = None
+    file_size: int = 0
+    has_file: bool = False
+    submitted_at: str | None = None

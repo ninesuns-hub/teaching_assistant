@@ -3,7 +3,7 @@ import './App.css'
 import { sendChatMessage } from './api/chat'
 import { sendCode, register, login, selectRole } from './api/auth'
 import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, fetchMaterialFile } from './api/classes'
-import { fetchConversations, fetchConversationMessages } from './api/conversations'
+import { fetchConversations, fetchConversationMessages, deleteConversation } from './api/conversations'
 import {
   fetchClassStudents,
   generateStudentReport,
@@ -11,7 +11,17 @@ import {
   generateClassFeedback,
   fetchStudentReports,
 } from './api/learning'
+import {
+  fetchHomeworks,
+  createHomework,
+  deleteHomework,
+  submitHomework,
+  fetchHomeworkSubmissions,
+  downloadHomeworkAttachment,
+  downloadSubmissionFile,
+} from './api/homework'
 import { getStoredUser, setAuth, clearAuth, getToken } from './api/httpClient'
+import MarkdownMessage from './components/MarkdownMessage'
 import logoImg from './assets/logo.png'
 
 const SCENE_OPTIONS = [
@@ -55,6 +65,12 @@ const TRANSLATIONS = {
     scrollDownTeacher: 'Scroll down to manage classes',
     resourcesTitle: 'Learning Resources',
     teacherPageTitle: 'My Classes',
+    navChat: 'Chat',
+    navResources: 'Resources',
+    navClasses: 'Classes',
+    navHomework: 'Homework',
+    navMore: 'More',
+    homeworkPageTitle: 'Homework',
     view: 'View',
     download: 'Download',
     language: 'Language',
@@ -102,7 +118,7 @@ const TRANSLATIONS = {
       teacherNoClassHint: 'Create a class to start uploading materials',
       learningTitle: 'Learning Analytics',
       generateMyReport: 'Generate My Report',
-      classStudents: 'Class Students',
+      classStudents: 'My Students',
       generateReport: 'Generate Report',
       viewReport: 'View Report',
       generateClassFeedback: 'Generate Class Feedback',
@@ -110,6 +126,8 @@ const TRANSLATIONS = {
       generating: 'Generating...',
       messagesCount: 'Messages',
       noStudents: 'No students in class yet',
+      expandStudents: 'Expand',
+      collapseStudents: 'Collapse',
       reportTitle: 'Learning Report',
       feedbackTitle: 'Class Feedback',
       newChat: 'New Chat',
@@ -117,6 +135,27 @@ const TRANSLATIONS = {
       noHistory: 'No conversations yet',
       today: 'Today',
       attachImage: 'Image',
+      deleteChat: 'Delete',
+      deleteChatConfirm: 'Delete this conversation?',
+      homeworkTitle: 'Homework',
+      publishHomework: 'Publish Homework',
+      homeworkName: 'Title',
+      homeworkDesc: 'Description (optional)',
+      homeworkDue: 'Due date',
+      homeworkAttach: 'Attachment (optional)',
+      noHomework: 'No homework yet',
+      submitHomework: 'Submit',
+      resubmitHomework: 'Resubmit',
+      submissionNote: 'Note (optional)',
+      uploadSubmission: 'Upload file',
+      viewSubmissions: 'Submissions',
+      hideSubmissions: 'Hide',
+      submitted: 'Submitted',
+      notSubmitted: 'Not submitted',
+      deleteHomework: 'Delete',
+      deleteHomeworkConfirm: 'Delete this homework?',
+      downloadAttachment: 'Attachment',
+      submissionCount: 'submissions',
     }
   },
   zh: {
@@ -133,6 +172,12 @@ const TRANSLATIONS = {
     scrollDownTeacher: '向下滑动管理班级',
     resourcesTitle: '学习资源',
     teacherPageTitle: '我的班级',
+    navChat: '对话',
+    navResources: '学习资源',
+    navClasses: '我的班级',
+    navHomework: '作业',
+    navMore: '更多',
+    homeworkPageTitle: '作业',
     view: '查看',
     download: '下载',
     language: '语言',
@@ -180,7 +225,7 @@ const TRANSLATIONS = {
       teacherNoClassHint: '创建班级后即可上传和管理学习资料',
       learningTitle: '学情分析',
       generateMyReport: '生成我的学情报告',
-      classStudents: '班级学生',
+      classStudents: '我的学生',
       generateReport: '生成学情报告',
       viewReport: '查看报告',
       generateClassFeedback: '生成班级学情反馈',
@@ -188,6 +233,8 @@ const TRANSLATIONS = {
       generating: '生成中...',
       messagesCount: '对话数',
       noStudents: '班级暂无学生',
+      expandStudents: '展开',
+      collapseStudents: '收起',
       reportTitle: '学情报告',
       feedbackTitle: '班级学情反馈',
       newChat: '新对话',
@@ -195,6 +242,27 @@ const TRANSLATIONS = {
       noHistory: '暂无历史会话',
       today: '今天',
       attachImage: '图片',
+      deleteChat: '删除',
+      deleteChatConfirm: '确定删除这条对话吗？',
+      homeworkTitle: '作业',
+      publishHomework: '发布作业',
+      homeworkName: '作业标题',
+      homeworkDesc: '作业说明（可选）',
+      homeworkDue: '截止日期',
+      homeworkAttach: '附件（可选）',
+      noHomework: '暂无作业',
+      submitHomework: '提交作业',
+      resubmitHomework: '重新提交',
+      submissionNote: '文字说明（可选）',
+      uploadSubmission: '上传文件',
+      viewSubmissions: '查看提交',
+      hideSubmissions: '收起',
+      submitted: '已提交',
+      notSubmitted: '未提交',
+      deleteHomework: '删除',
+      deleteHomeworkConfirm: '确定删除这份作业吗？',
+      downloadAttachment: '下载附件',
+      submissionCount: '份提交',
     }
   }
 }
@@ -321,11 +389,19 @@ function App() {
   const [classes, setClasses] = useState([])
   const [activeClassId, setActiveClassId] = useState(null)
   const [materials, setMaterials] = useState([])
+  const [homeworks, setHomeworks] = useState([])
+  const [homeworkForm, setHomeworkForm] = useState({ title: '', description: '', dueAt: '' })
+  const [homeworkFile, setHomeworkFile] = useState(null)
+  const [homeworkBusy, setHomeworkBusy] = useState(false)
+  const [expandedHomeworkId, setExpandedHomeworkId] = useState(null)
+  const [homeworkSubmissions, setHomeworkSubmissions] = useState({})
+  const [submitDrafts, setSubmitDrafts] = useState({})
   const [classForm, setClassForm] = useState({ name: '', inviteCode: '' })
   const [conversationId, setConversationId] = useState(null)
   const [conversations, setConversations] = useState([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [students, setStudents] = useState([])
+  const [studentsOpen, setStudentsOpen] = useState(false)
   const [reportModal, setReportModal] = useState(null)
   const [feedbackModal, setFeedbackModal] = useState(null)
   const [generatingLearning, setGeneratingLearning] = useState(false)
@@ -370,13 +446,48 @@ function App() {
     }
   }, [])
 
+  const loadHomeworks = useCallback(async (classId) => {
+    if (!classId || !user?.role) return
+    try {
+      const data = await fetchHomeworks(classId)
+      setHomeworks(data)
+    } catch (err) {
+      console.error(err)
+      setHomeworks([])
+    }
+  }, [user?.role])
+
   useEffect(() => {
     if (user?.role) loadClasses()
   }, [user?.role, loadClasses])
 
   useEffect(() => {
-    if (activeClassId) loadMaterials(activeClassId)
-  }, [activeClassId, loadMaterials])
+    if (activeClassId) {
+      loadMaterials(activeClassId)
+      loadHomeworks(activeClassId)
+      setExpandedHomeworkId(null)
+    } else {
+      setHomeworks([])
+    }
+  }, [activeClassId, loadMaterials, loadHomeworks])
+
+  const scrollToSection = useCallback((target) => {
+    const container = containerRef.current
+    if (!container) return
+    if (target === 'chat' || target === 'section-chat') {
+      container.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    const el = document.getElementById(target)
+    if (!el) {
+      container.scrollTo({ top: window.innerHeight, behavior: 'smooth' })
+      return
+    }
+    const cRect = container.getBoundingClientRect()
+    const eRect = el.getBoundingClientRect()
+    const top = eRect.top - cRect.top + container.scrollTop
+    container.scrollTo({ top, behavior: 'smooth' })
+  }, [])
 
   const loadConversations = useCallback(async () => {
     if (!user?.role) return []
@@ -541,12 +652,19 @@ function App() {
     setUser(null)
     setClasses([])
     setMaterials([])
+    setHomeworks([])
+    setHomeworkForm({ title: '', description: '', dueAt: '' })
+    setHomeworkFile(null)
+    setExpandedHomeworkId(null)
+    setHomeworkSubmissions({})
+    setSubmitDrafts({})
     setActiveClassId(null)
     setMessages([])
     setConversationId(null)
     setConversations([])
     setSidebarOpen(false)
     setStudents([])
+    setStudentsOpen(false)
     setReportModal(null)
     setFeedbackModal(null)
   }
@@ -559,6 +677,21 @@ function App() {
   const handleSelectConversation = async (id) => {
     await selectConversation(id)
     setSidebarOpen(false)
+  }
+
+  const handleDeleteConversation = async (e, id) => {
+    e.stopPropagation()
+    if (!window.confirm(t.auth.deleteChatConfirm)) return
+    try {
+      await deleteConversation(id)
+      setConversations(prev => prev.filter(c => c.id !== id))
+      if (conversationId === id) {
+        setConversationId(null)
+        setMessages([])
+      }
+    } catch (err) {
+      alert(err.message || (language === 'zh' ? '删除失败' : 'Delete failed'))
+    }
   }
 
   const handleGenerateStudentReport = async (studentId) => {
@@ -675,6 +808,98 @@ function App() {
     }
   }
 
+  const downloadBlobFile = (blob, filename) => {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || 'download'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
+  const handlePublishHomework = async () => {
+    if (!activeClassId || !homeworkForm.title.trim() || homeworkBusy) return
+    setHomeworkBusy(true)
+    try {
+      await createHomework(activeClassId, {
+        title: homeworkForm.title.trim(),
+        description: homeworkForm.description,
+        dueAt: homeworkForm.dueAt,
+        file: homeworkFile,
+      })
+      setHomeworkForm({ title: '', description: '', dueAt: '' })
+      setHomeworkFile(null)
+      await loadHomeworks(activeClassId)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setHomeworkBusy(false)
+    }
+  }
+
+  const handleDeleteHomework = async (homeworkId) => {
+    if (!window.confirm(t.auth.deleteHomeworkConfirm)) return
+    try {
+      await deleteHomework(homeworkId)
+      setHomeworks(prev => prev.filter(h => h.id !== homeworkId))
+      if (expandedHomeworkId === homeworkId) setExpandedHomeworkId(null)
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const handleSubmitHomework = async (homeworkId) => {
+    if (homeworkBusy) return
+    const draft = submitDrafts[homeworkId] || {}
+    setHomeworkBusy(true)
+    try {
+      await submitHomework(homeworkId, {
+        content: draft.content || '',
+        file: draft.file || null,
+      })
+      setSubmitDrafts(prev => ({ ...prev, [homeworkId]: { content: '', file: null } }))
+      await loadHomeworks(activeClassId)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setHomeworkBusy(false)
+    }
+  }
+
+  const handleToggleSubmissions = async (homeworkId) => {
+    if (expandedHomeworkId === homeworkId) {
+      setExpandedHomeworkId(null)
+      return
+    }
+    try {
+      const rows = await fetchHomeworkSubmissions(homeworkId)
+      setHomeworkSubmissions(prev => ({ ...prev, [homeworkId]: rows }))
+      setExpandedHomeworkId(homeworkId)
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const handleDownloadAttachment = async (hw) => {
+    try {
+      const blob = await downloadHomeworkAttachment(hw.id)
+      downloadBlobFile(blob, hw.attachment_name || 'attachment')
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const handleDownloadSubmission = async (sub) => {
+    try {
+      const blob = await downloadSubmissionFile(sub.id)
+      downloadBlobFile(blob, sub.filename || 'submission')
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
   // 自动滚动到最新消息
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -696,26 +921,60 @@ function App() {
     }
   }, [])
 
-  // 滚动位置追踪 + 区段吸附（防止卡在中间）
+  // 滚动位置追踪 + 多屏吸附（防止卡在屏间空白）
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     let snapTimer
+    const sectionIds = ['section-chat', 'section-resources', 'section-homework']
+
+    const getSectionTops = () => {
+      const tops = []
+      sectionIds.forEach((id) => {
+        const el = document.getElementById(id) || (id === 'section-chat' ? container.querySelector('.section-chat') : null)
+        if (!el) return
+        // offset relative to scroll container
+        let top = 0
+        let node = el
+        while (node && node !== container) {
+          top += node.offsetTop
+          node = node.offsetParent
+        }
+        // fallback using getBoundingClientRect
+        if (top === 0 && el !== container) {
+          const cRect = container.getBoundingClientRect()
+          const eRect = el.getBoundingClientRect()
+          top = eRect.top - cRect.top + container.scrollTop
+        }
+        tops.push(top)
+      })
+      return tops
+    }
+
     const handleScroll = () => {
       const vh = window.innerHeight
       setScrollPos(container.scrollTop / vh)
 
       clearTimeout(snapTimer)
       snapTimer = setTimeout(() => {
-        const top = container.scrollTop
-        const ratio = top / vh
-        // 仅在两屏过渡区间吸附，已进入第二屏长内容区后不再强制拉回
-        if (ratio > 0.06 && ratio < 0.94) {
-          const target = ratio < 0.5 ? 0 : vh
-          container.scrollTo({ top: target, behavior: 'smooth' })
+        const tops = getSectionTops()
+        if (tops.length === 0) return
+        const current = container.scrollTop
+        let nearest = tops[0]
+        let minDist = Math.abs(current - tops[0])
+        tops.forEach((t) => {
+          const d = Math.abs(current - t)
+          if (d < minDist) {
+            minDist = d
+            nearest = t
+          }
+        })
+        // 靠近某屏顶部时吸附，避免停在两屏中间的空白带
+        if (minDist > 24 && minDist < vh * 0.42) {
+          container.scrollTo({ top: nearest, behavior: 'smooth' })
         }
-      }, 150)
+      }, 140)
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
@@ -915,15 +1174,38 @@ function App() {
                 {conversations.length === 0 ? (
                   <p className="sidebar-empty">{t.auth.noHistory}</p>
                 ) : conversations.map(c => (
-                  <button
+                  <div
                     key={c.id}
-                    type="button"
                     className={`sidebar-item ${conversationId === c.id ? 'active' : ''}`}
                     onClick={() => handleSelectConversation(c.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleSelectConversation(c.id)
+                      }
+                    }}
                   >
-                    <span className="sidebar-item-title">{c.title}</span>
-                    <span className="sidebar-item-date">{formatConvDate(c.updated_at, t.auth.today)}</span>
-                  </button>
+                    <div className="sidebar-item-main">
+                      <span className="sidebar-item-title">{c.title}</span>
+                      <span className="sidebar-item-date">{formatConvDate(c.updated_at, t.auth.today)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="sidebar-delete-btn"
+                      title={t.auth.deleteChat}
+                      aria-label={t.auth.deleteChat}
+                      onClick={(e) => handleDeleteConversation(e, c.id)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M4 7h16" />
+                        <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        <path d="M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13" />
+                        <path d="M10 11v6M14 11v6" />
+                      </svg>
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -942,9 +1224,29 @@ function App() {
         ))}
 
         <header className={`topbar ${pageBlend > 0.5 ? 'topbar-scrolled' : ''}`}>
-          <div className="brand">
-            <img src={logoImg} alt="Logo" className="logo-img" />
-            <span className="brand-text">{t.brand}</span>
+          <div className="topbar-left">
+            <div className="brand">
+              <img src={logoImg} alt="Logo" className="logo-img" />
+              <span className="brand-text">{t.brand}</span>
+            </div>
+            <nav className="topbar-nav" aria-label="Primary">
+              <button type="button" className={`nav-link ${pageBlend < 0.55 ? 'active' : ''}`} onClick={() => scrollToSection('chat')}>
+                {t.navChat}
+              </button>
+              {user && (
+                <>
+                  <button type="button" className={`nav-link ${pageBlend >= 0.55 && pageBlend < 1.55 ? 'active' : ''}`} onClick={() => scrollToSection(isTeacher ? 'section-classes' : 'section-resources')}>
+                    {isTeacher ? t.navClasses : t.navResources}
+                  </button>
+                  <button type="button" className={`nav-link ${pageBlend >= 1.55 ? 'active' : ''}`} onClick={() => scrollToSection('section-homework')}>
+                    {t.navHomework}
+                  </button>
+                  <button type="button" className="nav-link nav-link-more" disabled title={language === 'zh' ? '即将推出' : 'Coming soon'}>
+                    {t.navMore}
+                  </button>
+                </>
+              )}
+            </nav>
           </div>
           <div className="topbar-actions">
             <div className="settings-wrap">
@@ -977,7 +1279,7 @@ function App() {
           </div>
         </header>
 
-        <section className="section section-chat">
+        <section id="section-chat" className="section section-chat">
           <div className="chat-shell" style={{
             opacity: chatOpacity, 
             transform: `scale(${0.98 + chatOpacity * 0.02}) translateY(${pageBlend * -50}px)` 
@@ -994,7 +1296,11 @@ function App() {
                       <AuthImage path={msg.imagePath} previewUrl={msg.imagePreview} />
                     )}
                     {msg.content && msg.content !== '[图片]' && msg.content !== '[Image]' && (
-                      <p className="message-text">{msg.content}</p>
+                      msg.role === 'assistant' ? (
+                        <MarkdownMessage content={msg.content} />
+                      ) : (
+                        <p className="message-text">{msg.content}</p>
+                      )
                     )}
                     {msg.content && (msg.content === '[图片]' || msg.content === '[Image]') && !(msg.imagePreview || msg.imagePath) && (
                       <p className="message-text">{msg.content}</p>
@@ -1018,19 +1324,6 @@ function App() {
                 hidden
                 onChange={handlePickImage}
               />
-              <button
-                type="button"
-                className="attach-image-btn"
-                title={t.auth.attachImage}
-                disabled={isSending}
-                onClick={() => imageInputRef.current?.click()}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <circle cx="8.5" cy="10" r="1.5" />
-                  <path d="M21 16l-5.5-5.5a2 2 0 0 0-3 0L3 18" />
-                </svg>
-              </button>
               <textarea
                 value={input} 
                 onChange={(e) => setInput(e.target.value)} 
@@ -1038,6 +1331,18 @@ function App() {
                 placeholder={t.placeholder} 
                 rows={1} 
               />
+              <button
+                type="button"
+                className="attach-image-btn"
+                title={t.auth.attachImage}
+                disabled={isSending}
+                onClick={() => imageInputRef.current?.click()}
+                aria-label={t.auth.attachImage}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21.44 11.05l-8.49 8.49a5.25 5.25 0 0 1-7.42-7.42l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.75 1.75 0 0 1-2.47-2.47l8.49-8.48" />
+                </svg>
+              </button>
               <button type="submit" disabled={(!input.trim() && !pendingImage) || isSending}>
                 {isSending ? t.sending : t.send}
               </button>
@@ -1085,73 +1390,92 @@ function App() {
           </div>
         </section>
 
-        <section className={`section section-resources ${isTeacher ? 'section-teacher' : 'section-student'}`} style={{ 
-          opacity: Math.min(1, (pageBlend - 0.2) * 2),
-          transform: `translateY(${(1 - pageBlend) * 80}px)`
+        <section id="section-resources" className={`section section-resources ${isTeacher ? 'section-teacher' : 'section-student'}`} style={{ 
+          opacity: Math.min(1, Math.max(0, (pageBlend - 0.15) * 1.8)),
         }}>
           <div className="resources-container">
-            <div className="resources-header">
+            <div className="resources-header" id={isTeacher ? 'section-classes' : undefined}>
               <h2>{secondPageTitle}</h2>
+              {!user && <p className="muted">{t.login}</p>}
+            </div>
 
-              {!user && (
-                <p className="muted">{t.login}</p>
-              )}
-
-              {isTeacher && user && (
-                <div className="class-panel teacher-panel">
-                  <div className="class-actions">
-                    <input
-                      value={classForm.name}
-                      onChange={e => setClassForm(p => ({ ...p, name: e.target.value }))}
-                      placeholder={t.auth.className}
-                    />
-                    <button type="button" onClick={handleCreateClass}>{t.auth.createClass}</button>
-                  </div>
-                  {classes.length === 0 ? (
-                    <p className="muted">{t.auth.teacherNoClassHint}</p>
-                  ) : (
-                    <>
-                      <div className="class-tabs">
-                        {classes.map(c => (
+            {isTeacher && user && (
+              <div className="class-panel teacher-panel">
+                <div className="class-actions">
+                  <input
+                    value={classForm.name}
+                    onChange={e => setClassForm(p => ({ ...p, name: e.target.value }))}
+                    placeholder={t.auth.className}
+                  />
+                  <button type="button" className="action-btn action-btn-primary" onClick={handleCreateClass}>
+                    {t.auth.createClass}
+                  </button>
+                </div>
+                {classes.length === 0 ? (
+                  <p className="muted">{t.auth.teacherNoClassHint}</p>
+                ) : (
+                  <>
+                    <div className="class-tabs">
+                      {classes.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className={`filter-btn ${activeClassId === c.id ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveClassId(c.id)
+                            setStudentsOpen(false)
+                          }}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                    {activeClassId && (
+                      <p className="invite-code-display">
+                        {t.auth.inviteCodeLabel}: <strong>{classes.find(c => c.id === activeClassId)?.invite_code}</strong>
+                      </p>
+                    )}
+                    {activeClassId && (
+                      <label className="upload-btn">
+                        {t.auth.uploadMaterial}
+                        <input type="file" accept=".pdf,.pptx,.ppsx" hidden onChange={handleUploadMaterial} />
+                      </label>
+                    )}
+                    {activeClassId && (
+                      <div className="learning-panel">
+                        <h3>{t.auth.learningTitle}</h3>
+                        <div className="learning-actions">
                           <button
-                            key={c.id}
                             type="button"
-                            className={`filter-btn ${activeClassId === c.id ? 'active' : ''}`}
-                            onClick={() => setActiveClassId(c.id)}
+                            className="solid-btn"
+                            disabled={generatingLearning}
+                            onClick={handleGenerateClassFeedback}
                           >
-                            {c.name}
+                            {generatingLearning ? t.auth.generating : t.auth.generateClassFeedback}
                           </button>
-                        ))}
-                      </div>
-                      {activeClassId && (
-                        <p className="invite-code-display">
-                          {t.auth.inviteCodeLabel}: <strong>{classes.find(c => c.id === activeClassId)?.invite_code}</strong>
-                        </p>
-                      )}
-                      {activeClassId && (
-                        <label className="upload-btn">
-                          {t.auth.uploadMaterial}
-                          <input type="file" accept=".pdf,.pptx,.ppsx" hidden onChange={handleUploadMaterial} />
-                        </label>
-                      )}
-                      {activeClassId && (
-                        <div className="learning-panel">
-                          <h3>{t.auth.learningTitle}</h3>
-                          <div className="learning-actions">
-                            <button
-                              type="button"
-                              className="solid-btn"
-                              disabled={generatingLearning}
-                              onClick={handleGenerateClassFeedback}
-                            >
-                              {generatingLearning ? t.auth.generating : t.auth.generateClassFeedback}
-                            </button>
-                          </div>
-                          <h4>{t.auth.classStudents}</h4>
-                          {students.length === 0 ? (
-                            <p className="muted">{t.auth.noStudents}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className={`students-fold-toggle ${studentsOpen ? 'open' : ''}`}
+                          onClick={() => setStudentsOpen(o => !o)}
+                          aria-expanded={studentsOpen}
+                        >
+                          <span className="students-fold-label">
+                            {t.auth.classStudents}
+                            <span className="students-fold-count">{students.length}</span>
+                          </span>
+                          <span className="students-fold-meta">
+                            {studentsOpen ? t.auth.collapseStudents : t.auth.expandStudents}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M6 9l6 6 6-6" />
+                            </svg>
+                          </span>
+                        </button>
+                        {studentsOpen && (
+                          students.length === 0 ? (
+                            <p className="muted students-fold-body">{t.auth.noStudents}</p>
                           ) : (
-                            <div className="student-list">
+                            <div className="student-list students-fold-body">
                               {students.map(s => (
                                 <div key={s.id} className="student-row">
                                   <div>
@@ -1174,68 +1498,72 @@ function App() {
                                 </div>
                               ))}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+                          )
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
-              {isStudent && user && (
-                <div className="class-panel student-panel">
-                  {classes.length === 0 ? (
-                    <>
-                      <p className="muted">{t.auth.studentNoClassHint}</p>
-                      <div className="class-actions">
-                        <input
-                          value={classForm.inviteCode}
-                          onChange={e => setClassForm(p => ({ ...p, inviteCode: e.target.value }))}
-                          placeholder={t.auth.inviteCode}
-                        />
-                        <button type="button" onClick={handleJoinClass}>{t.auth.joinClass}</button>
+            {isStudent && user && (
+              <div className="class-panel student-panel">
+                {classes.length === 0 ? (
+                  <>
+                    <p className="muted">{t.auth.studentNoClassHint}</p>
+                    <div className="class-actions">
+                      <input
+                        value={classForm.inviteCode}
+                        onChange={e => setClassForm(p => ({ ...p, inviteCode: e.target.value }))}
+                        placeholder={t.auth.inviteCode}
+                      />
+                      <button type="button" className="action-btn action-btn-primary" onClick={handleJoinClass}>
+                        {t.auth.joinClass}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="muted">{t.auth.selectClassHint}</p>
+                    <div className="class-tabs">
+                      {classes.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className={`filter-btn ${activeClassId === c.id ? 'active' : ''}`}
+                          onClick={() => setActiveClassId(c.id)}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="class-actions join-more">
+                      <input
+                        value={classForm.inviteCode}
+                        onChange={e => setClassForm(p => ({ ...p, inviteCode: e.target.value }))}
+                        placeholder={t.auth.inviteCode}
+                      />
+                      <button type="button" className="action-btn action-btn-soft" onClick={handleJoinClass}>
+                        {t.auth.joinClass}
+                      </button>
+                    </div>
+                    {activeClassId && (
+                      <div className="learning-panel">
+                        <button
+                          type="button"
+                          className="solid-btn"
+                          disabled={generatingLearning}
+                          onClick={handleGenerateMyReport}
+                        >
+                          {generatingLearning ? t.auth.generating : t.auth.generateMyReport}
+                        </button>
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="muted">{t.auth.selectClassHint}</p>
-                      <div className="class-tabs">
-                        {classes.map(c => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            className={`filter-btn ${activeClassId === c.id ? 'active' : ''}`}
-                            onClick={() => setActiveClassId(c.id)}
-                          >
-                            {c.name}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="class-actions join-more">
-                        <input
-                          value={classForm.inviteCode}
-                          onChange={e => setClassForm(p => ({ ...p, inviteCode: e.target.value }))}
-                          placeholder={t.auth.inviteCode}
-                        />
-                        <button type="button" onClick={handleJoinClass}>{t.auth.joinClass}</button>
-                      </div>
-                      {activeClassId && (
-                        <div className="learning-panel">
-                          <button
-                            type="button"
-                            className="solid-btn"
-                            disabled={generatingLearning}
-                            onClick={handleGenerateMyReport}
-                          >
-                            {generatingLearning ? t.auth.generating : t.auth.generateMyReport}
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             {(isStudent || isTeacher) && user && classes.length > 0 && (
               <div className="resources-grid">
@@ -1265,6 +1593,168 @@ function App() {
             )}
           </div>
         </section>
+
+        {user && (isTeacher || isStudent) && (
+          <section id="section-homework" className="section section-homework">
+            <div className="resources-container">
+              <div className="resources-header">
+                <h2>{t.homeworkPageTitle}</h2>
+              </div>
+
+              <div className="homework-panel">
+                {isTeacher && activeClassId && (
+                  <div className="homework-publish">
+                    <input
+                      value={homeworkForm.title}
+                      onChange={e => setHomeworkForm(p => ({ ...p, title: e.target.value }))}
+                      placeholder={t.auth.homeworkName}
+                    />
+                    <textarea
+                      value={homeworkForm.description}
+                      onChange={e => setHomeworkForm(p => ({ ...p, description: e.target.value }))}
+                      placeholder={t.auth.homeworkDesc}
+                      rows={3}
+                    />
+                    <div className="homework-publish-row">
+                      <input
+                        type="datetime-local"
+                        value={homeworkForm.dueAt}
+                        onChange={e => setHomeworkForm(p => ({ ...p, dueAt: e.target.value }))}
+                        aria-label={t.auth.homeworkDue}
+                      />
+                      <label className="upload-btn soft">
+                        {homeworkFile ? homeworkFile.name : t.auth.homeworkAttach}
+                        <input
+                          type="file"
+                          accept=".pdf,.pptx,.ppsx,.doc,.docx,.zip,.png,.jpg,.jpeg"
+                          hidden
+                          onChange={e => setHomeworkFile(e.target.files?.[0] || null)}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="action-btn action-btn-primary"
+                        disabled={homeworkBusy || !homeworkForm.title.trim()}
+                        onClick={handlePublishHomework}
+                      >
+                        {t.auth.publishHomework}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!activeClassId ? (
+                  <p className="muted">{t.auth.noClasses}</p>
+                ) : homeworks.length === 0 ? (
+                  <p className="muted">{t.auth.noHomework}</p>
+                ) : (
+                  <div className="homework-list">
+                    {homeworks.map(hw => {
+                      const draft = submitDrafts[hw.id] || {}
+                      const subs = homeworkSubmissions[hw.id] || []
+                      return (
+                        <div key={hw.id} className="homework-card">
+                          <div className="homework-card-top">
+                            <div>
+                              <h4>{hw.title}</h4>
+                              {hw.description && <p className="homework-desc">{hw.description}</p>}
+                              <div className="homework-meta">
+                                {hw.due_at && <span>{t.auth.homeworkDue}: {hw.due_at.slice(0, 16).replace('T', ' ')}</span>}
+                                {isTeacher && <span>{hw.submission_count} {t.auth.submissionCount}</span>}
+                                {isStudent && (
+                                  <span className={hw.my_submission ? 'status-done' : 'status-pending'}>
+                                    {hw.my_submission ? t.auth.submitted : t.auth.notSubmitted}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="homework-card-actions">
+                              {hw.has_attachment && (
+                                <button type="button" className="download-btn" onClick={() => handleDownloadAttachment(hw)}>
+                                  {t.auth.downloadAttachment}
+                                </button>
+                              )}
+                              {isTeacher && (
+                                <>
+                                  <button type="button" className="download-btn" onClick={() => handleToggleSubmissions(hw.id)}>
+                                    {expandedHomeworkId === hw.id ? t.auth.hideSubmissions : t.auth.viewSubmissions}
+                                  </button>
+                                  <button type="button" className="download-btn danger" onClick={() => handleDeleteHomework(hw.id)}>
+                                    {t.auth.deleteHomework}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {isStudent && (
+                            <div className="homework-submit">
+                              <textarea
+                                value={draft.content || ''}
+                                onChange={e => setSubmitDrafts(prev => ({
+                                  ...prev,
+                                  [hw.id]: { ...draft, content: e.target.value },
+                                }))}
+                                placeholder={t.auth.submissionNote}
+                                rows={2}
+                              />
+                              <div className="homework-publish-row">
+                                <label className="upload-btn soft">
+                                  {draft.file ? draft.file.name : t.auth.uploadSubmission}
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.pptx,.ppsx,.doc,.docx,.zip,.png,.jpg,.jpeg"
+                                    hidden
+                                    onChange={e => setSubmitDrafts(prev => ({
+                                      ...prev,
+                                      [hw.id]: { ...draft, file: e.target.files?.[0] || null },
+                                    }))}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  className="action-btn action-btn-primary"
+                                  disabled={homeworkBusy}
+                                  onClick={() => handleSubmitHomework(hw.id)}
+                                >
+                                  {hw.my_submission ? t.auth.resubmitHomework : t.auth.submitHomework}
+                                </button>
+                              </div>
+                              {hw.my_submission?.filename && (
+                                <p className="muted-inline">{hw.my_submission.filename}</p>
+                              )}
+                            </div>
+                          )}
+
+                          {isTeacher && expandedHomeworkId === hw.id && (
+                            <div className="submission-list">
+                              {subs.length === 0 ? (
+                                <p className="muted">{t.auth.noHomework}</p>
+                              ) : subs.map(sub => (
+                                <div key={sub.id} className="submission-row">
+                                  <div>
+                                    <strong>{sub.student_name}</strong>
+                                    {sub.content && <p className="homework-desc">{sub.content}</p>}
+                                    <span className="muted-inline">{sub.submitted_at?.slice(0, 16).replace('T', ' ')}</span>
+                                  </div>
+                                  {sub.has_file && (
+                                    <button type="button" className="download-btn" onClick={() => handleDownloadSubmission(sub)}>
+                                      {sub.filename || t.download}
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
       </main>
 
       {/* Report / Feedback Modals */}

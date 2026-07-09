@@ -65,6 +65,7 @@ class ClassRoom(Base):
     teacher = relationship("User", back_populates="taught_classes")
     members = relationship("ClassMember", back_populates="classroom", cascade="all, delete-orphan")
     materials = relationship("ClassMaterial", back_populates="classroom", cascade="all, delete-orphan")
+    homeworks = relationship("HomeworkAssignment", back_populates="classroom", cascade="all, delete-orphan")
 
 
 class ClassMember(Base):
@@ -93,6 +94,40 @@ class ClassMaterial(Base):
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     classroom = relationship("ClassRoom", back_populates="materials")
+
+
+class HomeworkAssignment(Base):
+    __tablename__ = "homework_assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    due_at = Column(DateTime, nullable=True)
+    attachment_path = Column(String(500), nullable=True)
+    attachment_name = Column(String(255), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    classroom = relationship("ClassRoom", back_populates="homeworks")
+    submissions = relationship("HomeworkSubmission", back_populates="homework", cascade="all, delete-orphan")
+
+
+class HomeworkSubmission(Base):
+    __tablename__ = "homework_submissions"
+    __table_args__ = (UniqueConstraint("homework_id", "student_id", name="uq_homework_student"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    homework_id = Column(Integer, ForeignKey("homework_assignments.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    content = Column(Text, nullable=True)
+    file_path = Column(String(500), nullable=True)
+    filename = Column(String(255), nullable=True)
+    file_type = Column(String(20), nullable=True)
+    file_size = Column(BigInteger, default=0)
+    submitted_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    homework = relationship("HomeworkAssignment", back_populates="submissions")
 
 
 class Conversation(Base):

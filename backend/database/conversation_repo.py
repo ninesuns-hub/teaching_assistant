@@ -37,6 +37,15 @@ def list_user_conversations(db: Session, user_id: int, limit: int = 50) -> List[
     )
 
 
+def delete_conversation(db: Session, conversation_id: int, user_id: int) -> bool:
+    conversation = get_conversation(db, conversation_id, user_id)
+    if not conversation:
+        return False
+    db.delete(conversation)
+    db.commit()
+    return True
+
+
 def add_message(
     db: Session,
     conversation_id: int,

@@ -26,6 +26,7 @@ from .auth_routes import router as auth_router
 from .class_routes import router as class_router
 from .conversation_routes import router as conversation_router
 from .learning_routes import router as learning_router
+from .homework_routes import router as homework_router
 
 hybrid_searcher = HybridSearcher()
 
@@ -34,6 +35,7 @@ router.include_router(auth_router, prefix="/auth", tags=["auth"])
 router.include_router(class_router, prefix="/classes", tags=["classes"])
 router.include_router(conversation_router, prefix="/conversations", tags=["conversations"])
 router.include_router(learning_router, prefix="/learning", tags=["learning"])
+router.include_router(homework_router, prefix="/homework", tags=["homework"])
 
 init_db()
 

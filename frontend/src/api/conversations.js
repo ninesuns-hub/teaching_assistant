@@ -12,3 +12,7 @@ export async function createConversation(classId = null) {
 export async function fetchConversationMessages(conversationId) {
   return request(`/api/conversations/${conversationId}/messages`)
 }
+
+export async function deleteConversation(conversationId) {
+  return request(`/api/conversations/${conversationId}`, { method: 'DELETE' })
+}

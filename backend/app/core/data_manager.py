@@ -23,6 +23,7 @@ class DataManager:
         dirs = [
             settings.COURSE_ASSETS_DIR,
             settings.CLASS_MATERIALS_DIR,
+            settings.HOMEWORK_DIR,
             settings.CHUNKS_DIR,
             os.path.dirname(settings.SQLITE_DB_PATH),
             os.path.dirname(settings.LOG_FILE)
@@ -62,6 +63,35 @@ class DataManager:
             return {"status": "success", "path": target_path}
         except Exception as e:
             logger.error(f"保存班级资料失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def save_homework_file(
+        self,
+        file_content: bytes,
+        filename: str,
+        class_id: int,
+        kind: str = "assignment",
+        homework_id: int | None = None,
+        student_id: int | None = None,
+    ):
+        """保存作业附件或学生提交文件（不入库 RAG）"""
+        parts = [settings.HOMEWORK_DIR, str(class_id)]
+        if kind == "submission" and homework_id is not None:
+            parts.extend(["submissions", str(homework_id)])
+            if student_id is not None:
+                parts.append(str(student_id))
+        else:
+            parts.append("assignments")
+        target_dir = os.path.join(*parts)
+        os.makedirs(target_dir, exist_ok=True)
+        target_path = os.path.join(target_dir, filename)
+        try:
+            with open(target_path, "wb") as f:
+                f.write(file_content)
+            logger.info(f"作业文件已保存至: {target_path}")
+            return {"status": "success", "path": target_path}
+        except Exception as e:
+            logger.error(f"保存作业文件失败: {e}")
             return {"status": "error", "message": str(e)}
 
     def ingest_file(self, file_path: str):

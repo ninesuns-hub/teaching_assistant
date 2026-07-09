@@ -66,3 +66,15 @@ async def get_conversation_messages(
         )
         for m in messages
     ]
+
+
+@router.delete("/{conversation_id}")
+async def delete_conversation(
+    conversation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    deleted = conversation_repo.delete_conversation(db, conversation_id, current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return {"ok": True}
