@@ -1,7 +1,9 @@
 import os
+from html import escape
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
+from pptx import Presentation
 from agent_core.config.settings import settings
 from database.mysql_db import get_db, User, UserRole
 from database import class_repo
@@ -15,6 +17,50 @@ MIME_BY_EXT = {
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".ppsx": "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
 }
+
+
+def _build_pptx_preview_html(file_path: str, filename: str) -> str:
+    prs = Presentation(file_path)
+    slide_blocks = []
+    for index, slide in enumerate(prs.slides, start=1):
+        lines = []
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                text = shape.text.strip()
+                if text:
+                    lines.append(escape(text))
+        body = "<br>".join(line.replace("\n", "<br>") for line in lines)
+        if not body:
+            body = "<span class='empty'>No text content extracted from this slide.</span>"
+        slide_blocks.append(f"""
+          <section class="slide">
+            <div class="slide-index">Slide {index}</div>
+            <div class="slide-body">{body}</div>
+          </section>
+        """)
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(filename)} preview</title>
+  <style>
+    body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f8fb; color: #16304a; }}
+    header {{ position: sticky; top: 0; padding: 18px 28px; background: rgba(244, 248, 251, 0.92); border-bottom: 1px solid rgba(22, 48, 74, 0.12); backdrop-filter: blur(12px); }}
+    h1 {{ margin: 0; font-size: 20px; }}
+    main {{ width: min(960px, calc(100% - 32px)); margin: 24px auto 48px; display: grid; gap: 18px; }}
+    .slide {{ background: #fff; border: 1px solid rgba(22, 48, 74, 0.12); border-radius: 8px; padding: 22px 24px; box-shadow: 0 12px 32px rgba(22, 48, 74, 0.08); }}
+    .slide-index {{ font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4a86b8; margin-bottom: 12px; }}
+    .slide-body {{ line-height: 1.7; white-space: normal; }}
+    .empty {{ color: #7d8fa3; }}
+  </style>
+</head>
+<body>
+  <header><h1>{escape(filename)}</h1></header>
+  <main>{''.join(slide_blocks)}</main>
+</body>
+</html>"""
 
 
 @router.post("", response_model=ClassResponse)
@@ -160,3 +206,39 @@ async def get_class_material_file(
         filename=material.filename,
         content_disposition_type=disposition,
     )
+
+
+@router.get("/{class_id}/materials/{material_id}/preview", response_class=HTMLResponse)
+async def preview_class_material(
+    class_id: int,
+    material_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not class_repo.user_can_access_class(db, current_user, class_id):
+        raise HTTPException(status_code=403, detail="无权访问该班级资料")
+
+    material = class_repo.get_material(db, class_id, material_id)
+    if not material:
+        raise HTTPException(status_code=404, detail="资料不存在")
+
+    file_path = os.path.realpath(material.file_path)
+    base_dir = os.path.realpath(settings.CLASS_MATERIALS_DIR)
+    if not file_path.startswith(base_dir) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="文件不存在或已损坏")
+
+    ext = os.path.splitext(material.filename)[1].lower()
+    if ext == ".pdf":
+        return FileResponse(
+            path=file_path,
+            media_type="application/pdf",
+            filename=material.filename,
+            content_disposition_type="inline",
+        )
+    if ext in {".pptx", ".ppsx"}:
+        try:
+            return HTMLResponse(_build_pptx_preview_html(file_path, material.filename))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"生成预览失败: {e}")
+
+    raise HTTPException(status_code=400, detail="该文件类型暂不支持在线预览")

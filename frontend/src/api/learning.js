@@ -4,6 +4,17 @@ export async function fetchClassStudents(classId) {
   return request(`/api/learning/classes/${classId}/students`)
 }
 
+export async function addClassStudent(classId, payload) {
+  return request(`/api/learning/classes/${classId}/students`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function removeClassStudent(classId, studentId) {
+  return request(`/api/learning/classes/${classId}/students/${studentId}`, { method: 'DELETE' })
+}
+
 export async function generateStudentReport(classId, studentId) {
   return request(`/api/learning/classes/${classId}/students/${studentId}/report`, { method: 'POST' })
 }

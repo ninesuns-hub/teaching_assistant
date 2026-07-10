@@ -83,6 +83,30 @@ def list_messages(db: Session, conversation_id: int, limit: int = 200) -> List[C
     )
 
 
+def update_message_feedback(
+    db: Session,
+    conversation_id: int,
+    message_id: int,
+    feedback_type: Optional[str],
+) -> Optional[ChatMessage]:
+    message = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.id == message_id,
+            ChatMessage.conversation_id == conversation_id,
+            ChatMessage.role == "assistant",
+        )
+        .first()
+    )
+    if not message:
+        return None
+    message.feedback_type = feedback_type
+    message.feedback_at = datetime.utcnow()
+    db.commit()
+    db.refresh(message)
+    return message
+
+
 def get_student_messages_in_class(
     db: Session,
     student_id: int,

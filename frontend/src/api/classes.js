@@ -45,3 +45,20 @@ export async function fetchMaterialFile(classId, materialId, download = false) {
   }
   return response.blob()
 }
+
+export async function fetchMaterialPreview(classId, materialId) {
+  const url = `${API_BASE_URL}/api/classes/${classId}/materials/${materialId}/preview`
+  const token = getToken()
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!response.ok) {
+    let detail = `Request failed: ${response.status}`
+    try {
+      const data = await response.json()
+      detail = data.detail || data.message || detail
+    } catch (_) {}
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+  }
+  return response.blob()
+}

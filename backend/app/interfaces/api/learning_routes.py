@@ -10,7 +10,7 @@ from app.services.learning_service import (
     _serialize_report,
     _serialize_feedback,
 )
-from .schemas import StudentBriefResponse, LearningReportResponse, ClassFeedbackResponse
+from .schemas import StudentBriefResponse, LearningReportResponse, ClassFeedbackResponse, AddStudentRequest
 
 router = APIRouter()
 
@@ -38,6 +38,48 @@ async def list_class_students(
         )
         for s in students
     ]
+
+
+@router.post("/classes/{class_id}/students", response_model=StudentBriefResponse)
+async def add_class_student(
+    class_id: int,
+    payload: AddStudentRequest,
+    current_user: User = Depends(require_role(UserRole.TEACHER)),
+    db: Session = Depends(get_db),
+):
+    _ensure_teacher_class_access(db, current_user, class_id)
+    email = (payload.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="邮箱不能为空")
+
+    student = db.query(User).filter(User.email == email).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="未找到该用户")
+    if student.role != UserRole.STUDENT:
+        raise HTTPException(status_code=400, detail="该用户不是学生")
+
+    member = class_repo.add_student_to_class(db, class_id, student.id)
+    return StudentBriefResponse(
+        id=student.id,
+        name=student.name,
+        email=student.email,
+        joined_at=member.joined_at.isoformat() if member.joined_at else None,
+        message_count=conversation_repo.count_student_messages_in_class(db, student.id, class_id),
+    )
+
+
+@router.delete("/classes/{class_id}/students/{student_id}")
+async def remove_class_student(
+    class_id: int,
+    student_id: int,
+    current_user: User = Depends(require_role(UserRole.TEACHER)),
+    db: Session = Depends(get_db),
+):
+    _ensure_teacher_class_access(db, current_user, class_id)
+    removed = class_repo.remove_student_from_class(db, class_id, student_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="学生不在该班级中")
+    return {"ok": True}
 
 
 @router.post("/classes/{class_id}/students/{student_id}/report", response_model=LearningReportResponse)

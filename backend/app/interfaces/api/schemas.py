@@ -126,7 +126,16 @@ class ChatMessageResponse(BaseModel):
     role: str
     content: str
     image_url: str | None = None
+    feedback: str | None = None
     created_at: str
+
+
+class MessageFeedbackRequest(BaseModel):
+    feedback_type: str
+
+
+class AddStudentRequest(BaseModel):
+    email: str
 
 
 class StudentBriefResponse(BaseModel):

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import './App.css'
-import { sendChatMessage } from './api/chat'
+import { sendChatMessage, sendWelcomeMessage } from './api/chat'
 import { sendCode, register, login, selectRole } from './api/auth'
-import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, fetchMaterialFile } from './api/classes'
-import { fetchConversations, fetchConversationMessages, deleteConversation } from './api/conversations'
+import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, fetchMaterialFile, fetchMaterialPreview } from './api/classes'
+import { fetchConversations, fetchConversationMessages, deleteConversation, submitConversationFeedback } from './api/conversations'
 import {
   fetchClassStudents,
+  addClassStudent,
+  removeClassStudent,
   generateStudentReport,
   generateMyReport,
   generateClassFeedback,
@@ -46,6 +48,29 @@ const LineIcon = ({ type }) => {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="line-icon">
       <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </svg>
+  )
+}
+
+const MessageActionIcon = ({ type }) => {
+  if (type === 'copy') return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+    </svg>
+  )
+  if (type === 'up') return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 10v11" />
+      <path d="M15 5.5 14 10h5.2a2 2 0 0 1 1.95 2.44l-1.45 6.4A3 3 0 0 1 16.77 21H7" />
+      <path d="M7 10 12 3a2 2 0 0 1 3 2.5" />
+    </svg>
+  )
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 14V3" />
+      <path d="M15 18.5 14 14h5.2a2 2 0 0 0 1.95-2.44L19.7 5.16A3 3 0 0 0 16.77 3H7" />
+      <path d="M7 14 12 21a2 2 0 0 0 3-2.5" />
     </svg>
   )
 }
@@ -128,6 +153,16 @@ const TRANSLATIONS = {
       noStudents: 'No students in class yet',
       expandStudents: 'Expand',
       collapseStudents: 'Collapse',
+      addStudent: 'Add student',
+      studentEmail: 'Student email',
+      removeStudent: 'Remove',
+      feedbackHelpful: 'Helpful',
+      feedbackUnhelpful: 'Not helpful',
+      feedbackCopy: 'Copy',
+      welcomeGuest: 'Welcome! Please log in to start chatting.',
+      welcomeRolePending: 'Please choose your identity before you start.',
+      welcomeStudent: 'Hello! I am your discrete math tutor. I can help explain concepts and answer questions.',
+      welcomeTeacher: 'Hello, teacher! I can help answer student questions and support class management.',
       reportTitle: 'Learning Report',
       feedbackTitle: 'Class Feedback',
       newChat: 'New Chat',
@@ -235,6 +270,16 @@ const TRANSLATIONS = {
       noStudents: '班级暂无学生',
       expandStudents: '展开',
       collapseStudents: '收起',
+      addStudent: '添加学生',
+      studentEmail: '学生邮箱',
+      removeStudent: '移除',
+      feedbackHelpful: '满意',
+      feedbackUnhelpful: '不满意',
+      feedbackCopy: '复制',
+      welcomeGuest: '欢迎使用离散数学助教，请先登录后开始提问。',
+      welcomeRolePending: '请先完成身份选择，再开始使用助手。',
+      welcomeStudent: '你好，同学！我是你的离散数学助教，可以帮你解答问题并查看学习资料。',
+      welcomeTeacher: '你好，老师！我是离散数学助教，可以帮助你解答学生问题，并支持班级管理。',
       reportTitle: '学情报告',
       feedbackTitle: '班级学情反馈',
       newChat: '新对话',
@@ -333,6 +378,21 @@ function formatConvDate(iso, todayLabel) {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
+function getMaterialCategory(material) {
+  const filename = (material.filename || '').toLowerCase()
+  const extType = (material.file_type || '').toLowerCase()
+  if (filename.includes('practice') || filename.includes('exercise') || filename.includes('homework') || filename.includes('quiz')) {
+    return 'Practice'
+  }
+  if (filename.includes('book') || filename.includes('textbook')) {
+    return 'Books'
+  }
+  if (extType === 'pptx' || filename.endsWith('.pptx') || filename.endsWith('.ppsx')) {
+    return 'Slides'
+  }
+  return 'Notes'
+}
+
 function AuthImage({ path, previewUrl }) {
   const [src, setSrc] = useState(previewUrl || null)
 
@@ -377,6 +437,8 @@ function App() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [welcomeContent, setWelcomeContent] = useState('')
+  const [welcomeLoading, setWelcomeLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [authModal, setAuthModal] = useState(null) // null, 'login', 'signup'
   const [roleModalOpen, setRoleModalOpen] = useState(false)
@@ -402,14 +464,18 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [students, setStudents] = useState([])
   const [studentsOpen, setStudentsOpen] = useState(false)
+  const [studentEmailInput, setStudentEmailInput] = useState('')
+  const [studentBusy, setStudentBusy] = useState(false)
   const [reportModal, setReportModal] = useState(null)
   const [feedbackModal, setFeedbackModal] = useState(null)
   const [generatingLearning, setGeneratingLearning] = useState(false)
   const [pendingImage, setPendingImage] = useState(null)
   const imageInputRef = useRef(null)
+  const welcomeRequestRef = useRef(null)
   const [language, setLanguage] = useState('en')
   const [activeFilter, setActiveFilter] = useState('All')
   const [scrollPos, setScrollPos] = useState(0)
+  const [activeSection, setActiveSection] = useState('chat')
   
   const [dialRotation, setDialRotation] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
@@ -423,6 +489,32 @@ function App() {
   const secondPageTitle = isTeacher ? t.teacherPageTitle : t.resourcesTitle
   const scrollHint = isTeacher ? t.scrollDownTeacher : isStudent ? t.scrollDownStudent : t.scrollDown
   const pageBlend = useMemo(() => Math.min(1, Math.max(0, scrollPos)), [scrollPos])
+  const activeClass = useMemo(
+    () => classes.find(c => c.id === activeClassId) || null,
+    [classes, activeClassId],
+  )
+  const canChat = Boolean(user?.role && !user.needs_role_selection)
+
+  const welcomeText = useMemo(() => {
+    if (!user) return t.auth.welcomeGuest
+    if (user.needs_role_selection) return t.auth.welcomeRolePending
+    if (isTeacher && !activeClass) {
+      return language === 'zh'
+        ? '你好，老师！请先创建或选择一个班级，然后我会围绕当前班级协助你进行教学问答、资料与学生管理。'
+        : 'Hello, teacher! Create or select a class first, then I can support teaching Q&A, materials, and student management for that class.'
+    }
+    return isTeacher ? t.auth.welcomeTeacher : isStudent ? t.auth.welcomeStudent : t.auth.welcomeGuest
+  }, [user, isTeacher, isStudent, activeClass, language, t])
+
+  const chatPlaceholder = useMemo(() => {
+    if (!user) return t.auth.welcomeGuest
+    if (user.needs_role_selection) return t.auth.welcomeRolePending
+    return t.placeholder
+  }, [user, t])
+  const visibleMaterials = useMemo(() => {
+    if (activeFilter === 'All') return materials
+    return materials.filter(m => getMaterialCategory(m) === activeFilter)
+  }, [materials, activeFilter])
 
   const loadClasses = useCallback(async () => {
     if (!user?.role) return
@@ -507,9 +599,11 @@ function App() {
       setConversationId(id)
       const msgs = await fetchConversationMessages(id)
       setMessages(msgs.map(m => ({
+        id: m.id,
         role: m.role,
         content: m.content,
         imagePath: m.image_url || null,
+        feedback: m.feedback || null,
       })))
     } catch (err) {
       console.error(err)
@@ -541,6 +635,32 @@ function App() {
   useEffect(() => {
     if (user?.role) loadLatestConversation()
   }, [user?.role, loadLatestConversation])
+
+  useEffect(() => {
+    if (!canChat || conversationId || messages.length > 0) return
+    const key = `${user?.email || 'user'}:${user?.role || 'none'}:${activeClassId || 'none'}`
+    if (welcomeRequestRef.current === key) return
+
+    let cancelled = false
+    welcomeRequestRef.current = key
+    setWelcomeContent('')
+    setWelcomeLoading(true)
+
+    sendWelcomeMessage(activeClassId, (chunk) => {
+      if (!cancelled) setWelcomeContent(prev => prev + chunk)
+    })
+      .catch((err) => {
+        console.error(err)
+        if (!cancelled) setWelcomeContent('')
+      })
+      .finally(() => {
+        if (!cancelled) setWelcomeLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [canChat, conversationId, messages.length, activeClassId, user?.email, user?.role])
 
   useEffect(() => {
     if (activeClassId && isTeacher) loadStudents(activeClassId)
@@ -650,6 +770,9 @@ function App() {
   const handleLogout = () => {
     clearAuth()
     setUser(null)
+    welcomeRequestRef.current = null
+    setWelcomeContent('')
+    setWelcomeLoading(false)
     setClasses([])
     setMaterials([])
     setHomeworks([])
@@ -672,6 +795,8 @@ function App() {
   const handleNewChat = () => {
     setConversationId(null)
     setMessages([])
+    welcomeRequestRef.current = null
+    setWelcomeContent('')
   }
 
   const handleSelectConversation = async (id) => {
@@ -748,6 +873,33 @@ function App() {
     }
   }
 
+  const handleAddStudent = async () => {
+    if (!activeClassId || !studentEmailInput.trim() || studentBusy) return
+    setStudentBusy(true)
+    try {
+      await addClassStudent(activeClassId, { email: studentEmailInput.trim().toLowerCase() })
+      setStudentEmailInput('')
+      await loadStudents(activeClassId)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setStudentBusy(false)
+    }
+  }
+
+  const handleRemoveStudent = async (studentId) => {
+    if (!activeClassId || studentBusy) return
+    setStudentBusy(true)
+    try {
+      await removeClassStudent(activeClassId, studentId)
+      setStudents(prev => prev.filter(s => s.id !== studentId))
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setStudentBusy(false)
+    }
+  }
+
   const handleCreateClass = async () => {
     if (!classForm.name.trim()) return
     try {
@@ -787,11 +939,12 @@ function App() {
   const openMaterialFile = async (material, download = false) => {
     if (!activeClassId) return
     try {
-      const blob = await fetchMaterialFile(activeClassId, material.id, download)
+      const blob = download
+        ? await fetchMaterialFile(activeClassId, material.id, true)
+        : await fetchMaterialPreview(activeClassId, material.id)
       const url = URL.createObjectURL(blob)
-      const isPdf = material.file_type === 'pdf' || material.filename?.toLowerCase().endsWith('.pdf')
 
-      if (download || !isPdf) {
+      if (download) {
         const link = document.createElement('a')
         link.href = url
         link.download = material.filename
@@ -955,6 +1108,13 @@ function App() {
     const handleScroll = () => {
       const vh = window.innerHeight
       setScrollPos(container.scrollTop / vh)
+      const marker = container.scrollTop + vh * 0.35
+      const tops = getSectionTops()
+      let nextSection = 'chat'
+      if (tops[2] !== undefined && marker >= tops[2]) nextSection = 'homework'
+      else if (tops[1] !== undefined && marker >= tops[1]) nextSection = 'resources'
+      setActiveSection(nextSection)
+      return
 
       clearTimeout(snapTimer)
       snapTimer = setTimeout(() => {
@@ -978,6 +1138,7 @@ function App() {
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
     return () => {
       container.removeEventListener('scroll', handleScroll)
       clearTimeout(snapTimer)
@@ -1069,8 +1230,33 @@ function App() {
     e.target.value = ''
   }
 
+  const handleFeedback = async (messageIndex, feedbackType) => {
+    const targetMessage = messages[messageIndex]
+    if (!targetMessage || targetMessage.role !== 'assistant' || !conversationId || !targetMessage.id) return
+    try {
+      await submitConversationFeedback(conversationId, targetMessage.id, feedbackType)
+      setMessages(prev => prev.map((msg, idx) => idx === messageIndex ? { ...msg, feedback: feedbackType } : msg))
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const handleCopyMessage = async (content) => {
+    if (!content) return
+    try {
+      await navigator.clipboard.writeText(content)
+    } catch (err) {
+      alert(err.message || (language === 'zh' ? '复制失败' : 'Copy failed'))
+    }
+  }
+
   const handleSend = async (e) => {
     e.preventDefault()
+    if (!canChat) {
+      if (!user) setAuthModal('login')
+      else if (user.needs_role_selection) setRoleModalOpen(true)
+      return
+    }
     if ((!input.trim() && !pendingImage) || isSending) return
 
     const text = input.trim()
@@ -1117,6 +1303,14 @@ function App() {
       if (newConversationId) {
         setConversationId(newConversationId)
         loadConversations()
+        const persistedMessages = await fetchConversationMessages(newConversationId)
+        setMessages(persistedMessages.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          imagePath: m.image_url || null,
+          feedback: m.feedback || null,
+        })))
       }
     } catch (err) { 
       console.error(err)
@@ -1230,15 +1424,15 @@ function App() {
               <span className="brand-text">{t.brand}</span>
             </div>
             <nav className="topbar-nav" aria-label="Primary">
-              <button type="button" className={`nav-link ${pageBlend < 0.55 ? 'active' : ''}`} onClick={() => scrollToSection('chat')}>
+              <button type="button" className={`nav-link ${activeSection === 'chat' ? 'active' : ''}`} onClick={() => scrollToSection('chat')}>
                 {t.navChat}
               </button>
               {user && (
                 <>
-                  <button type="button" className={`nav-link ${pageBlend >= 0.55 && pageBlend < 1.55 ? 'active' : ''}`} onClick={() => scrollToSection(isTeacher ? 'section-classes' : 'section-resources')}>
+                  <button type="button" className={`nav-link ${activeSection === 'resources' ? 'active' : ''}`} onClick={() => scrollToSection(isTeacher ? 'section-classes' : 'section-resources')}>
                     {isTeacher ? t.navClasses : t.navResources}
                   </button>
-                  <button type="button" className={`nav-link ${pageBlend >= 1.55 ? 'active' : ''}`} onClick={() => scrollToSection('section-homework')}>
+                  <button type="button" className={`nav-link ${activeSection === 'homework' ? 'active' : ''}`} onClick={() => scrollToSection('section-homework')}>
                     {t.navHomework}
                   </button>
                   <button type="button" className="nav-link nav-link-more" disabled title={language === 'zh' ? '即将推出' : 'Coming soon'}>
@@ -1288,7 +1482,23 @@ function App() {
               <img src={logoImg} alt="Logo" className="logo-img logo-img-lg" />
               <h1>{t.title}</h1>
             </div>
-            <div className={`messages-list ${messages.length > 0 ? 'has-messages' : ''}`}>
+            <div className={`messages-list ${messages.length > 0 ? 'has-messages' : 'welcome-state'}`}>
+              {messages.length === 0 && (
+                <div className="welcome-card">
+                  {welcomeContent ? (
+                    <MarkdownMessage content={welcomeContent} />
+                  ) : welcomeLoading ? (
+                    <div className="thinking-indicator" aria-live="polite">
+                      <span />
+                      <span />
+                      <span />
+                      <em>{language === 'zh' ? '正在准备介绍' : 'Preparing intro'}</em>
+                    </div>
+                  ) : (
+                    <p>{welcomeText}</p>
+                  )}
+                </div>
+              )}
               {messages.map((msg, idx) => (
                 <div key={idx} className={`message-item ${msg.role}`}>
                   <div className="message-content">
@@ -1304,6 +1514,47 @@ function App() {
                     )}
                     {msg.content && (msg.content === '[图片]' || msg.content === '[Image]') && !(msg.imagePreview || msg.imagePath) && (
                       <p className="message-text">{msg.content}</p>
+                    )}
+                    {msg.role === 'assistant' && !msg.content && (
+                      <div className="thinking-indicator" aria-live="polite">
+                        <span />
+                        <span />
+                        <span />
+                        <em>{language === 'zh' ? '正在思考' : 'Thinking'}</em>
+                      </div>
+                    )}
+                    {msg.role === 'assistant' && msg.id && msg.content && (
+                      <>
+                        <div className="message-actions">
+                          <button
+                            type="button"
+                            className="feedback-btn"
+                            title={t.auth.feedbackCopy}
+                            aria-label={t.auth.feedbackCopy}
+                            onClick={() => handleCopyMessage(msg.content)}
+                          >
+                            <MessageActionIcon type="copy" />
+                          </button>
+                          <button
+                            type="button"
+                            className={`feedback-btn ${msg.feedback === 'positive' ? 'active' : ''}`}
+                            title={t.auth.feedbackHelpful}
+                            aria-label={t.auth.feedbackHelpful}
+                            onClick={() => handleFeedback(idx, 'positive')}
+                          >
+                            <MessageActionIcon type="up" />
+                          </button>
+                          <button
+                            type="button"
+                            className={`feedback-btn ${msg.feedback === 'negative' ? 'active' : ''}`}
+                            title={t.auth.feedbackUnhelpful}
+                            aria-label={t.auth.feedbackUnhelpful}
+                            onClick={() => handleFeedback(idx, 'negative')}
+                          >
+                            <MessageActionIcon type="down" />
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1328,14 +1579,15 @@ function App() {
                 value={input} 
                 onChange={(e) => setInput(e.target.value)} 
                 onKeyDown={handleKeyDown}
-                placeholder={t.placeholder} 
+                placeholder={chatPlaceholder} 
+                disabled={!canChat || isSending}
                 rows={1} 
               />
               <button
                 type="button"
                 className="attach-image-btn"
                 title={t.auth.attachImage}
-                disabled={isSending}
+                disabled={!canChat || isSending}
                 onClick={() => imageInputRef.current?.click()}
                 aria-label={t.auth.attachImage}
               >
@@ -1343,7 +1595,7 @@ function App() {
                   <path d="M21.44 11.05l-8.49 8.49a5.25 5.25 0 0 1-7.42-7.42l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.75 1.75 0 0 1-2.47-2.47l8.49-8.48" />
                 </svg>
               </button>
-              <button type="submit" disabled={(!input.trim() && !pendingImage) || isSending}>
+              <button type="submit" disabled={!canChat || (!input.trim() && !pendingImage) || isSending}>
                 {isSending ? t.sending : t.send}
               </button>
             </form>
@@ -1396,6 +1648,20 @@ function App() {
           <div className="resources-container">
             <div className="resources-header" id={isTeacher ? 'section-classes' : undefined}>
               <h2>{secondPageTitle}</h2>
+              {!isTeacher && user && classes.length > 0 && (
+                <div className="filter-bar">
+                  {RESOURCE_FILTERS.map(filter => (
+                    <button
+                      key={filter}
+                      type="button"
+                      className={`filter-btn ${activeFilter === filter ? 'active' : ''}`}
+                      onClick={() => setActiveFilter(filter)}
+                    >
+                      {t.filters[filter]}
+                    </button>
+                  ))}
+                </div>
+              )}
               {!user && <p className="muted">{t.login}</p>}
             </div>
 
@@ -1472,33 +1738,44 @@ function App() {
                           </span>
                         </button>
                         {studentsOpen && (
-                          students.length === 0 ? (
-                            <p className="muted students-fold-body">{t.auth.noStudents}</p>
-                          ) : (
-                            <div className="student-list students-fold-body">
-                              {students.map(s => (
-                                <div key={s.id} className="student-row">
-                                  <div>
-                                    <strong>{s.name}</strong>
-                                    <span className="muted-inline">{t.auth.messagesCount}: {s.message_count}</span>
-                                  </div>
-                                  <div className="card-actions">
-                                    <button type="button" className="download-btn" onClick={() => handleViewStudentReport(s.id)}>
-                                      {t.auth.viewReport}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="download-btn"
-                                      disabled={generatingLearning}
-                                      onClick={() => handleGenerateStudentReport(s.id)}
-                                    >
-                                      {t.auth.generateReport}
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
+                          <div className="student-list students-fold-body">
+                            <div className="student-manage-row">
+                              <input
+                                value={studentEmailInput}
+                                onChange={(e) => setStudentEmailInput(e.target.value)}
+                                placeholder={t.auth.studentEmail}
+                              />
+                              <button type="button" className="action-btn action-btn-primary" disabled={studentBusy} onClick={handleAddStudent}>
+                                {t.auth.addStudent}
+                              </button>
                             </div>
-                          )
+                            {students.length === 0 ? (
+                              <p className="muted">{t.auth.noStudents}</p>
+                            ) : students.map(s => (
+                              <div key={s.id} className="student-row">
+                                <div>
+                                  <strong>{s.name}</strong>
+                                  <span className="muted-inline">{t.auth.messagesCount}: {s.message_count}</span>
+                                </div>
+                                <div className="card-actions">
+                                  <button type="button" className="download-btn" onClick={() => handleViewStudentReport(s.id)}>
+                                    {t.auth.viewReport}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="download-btn"
+                                    disabled={generatingLearning}
+                                    onClick={() => handleGenerateStudentReport(s.id)}
+                                  >
+                                    {t.auth.generateReport}
+                                  </button>
+                                  <button type="button" className="download-btn danger" disabled={studentBusy} onClick={() => handleRemoveStudent(s.id)}>
+                                    {t.auth.removeStudent}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
                     )}
@@ -1566,14 +1843,32 @@ function App() {
             )}
 
             {(isStudent || isTeacher) && user && classes.length > 0 && (
-              <div className="resources-grid">
-                {materials.length === 0 ? (
-                  <div className="resource-card muted-card">
-                    <p className="muted">{t.auth.noClasses}</p>
+              <>
+                {isTeacher && (
+                  <div className="resource-library-header">
+                    <h3>{t.resourcesTitle}</h3>
+                    <div className="filter-bar">
+                      {RESOURCE_FILTERS.map(filter => (
+                        <button
+                          key={filter}
+                          type="button"
+                          className={`filter-btn ${activeFilter === filter ? 'active' : ''}`}
+                          onClick={() => setActiveFilter(filter)}
+                        >
+                          {t.filters[filter]}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                ) : materials.map(m => (
+                )}
+              <div className="resources-grid">
+                {visibleMaterials.length === 0 ? (
+                  <div className="resource-card muted-card">
+                    <p className="muted">{materials.length === 0 ? t.auth.noClasses : (language === 'zh' ? '该分类下暂无资料' : 'No resources in this category')}</p>
+                  </div>
+                ) : visibleMaterials.map(m => (
                   <div key={m.id} className="resource-card">
-                    <div className="card-type">{m.file_type.toUpperCase()}</div>
+                    <div className="card-type">{t.filters[getMaterialCategory(m)]}</div>
                     <h3>{m.filename}</h3>
                     <p>{(m.file_size / 1024 / 1024).toFixed(2)} MB</p>
                     <div className="card-footer">
@@ -1590,6 +1885,7 @@ function App() {
                   </div>
                 ))}
               </div>
+              </>
             )}
           </div>
         </section>

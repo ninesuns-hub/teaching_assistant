@@ -16,7 +16,6 @@ body {
   height: 100vh;
   overflow-y: auto;
   scroll-behavior: smooth;
-  scroll-snap-type: y mandatory;
   overscroll-behavior-y: contain;
 }
 
@@ -37,13 +36,10 @@ body {
   flex-direction: column;
   position: relative;
   padding-top: 80px;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
 }
 
 .section-chat {
   scroll-snap-align: start;
-  scroll-snap-stop: always;
 }
 
 /* Background Layers */
@@ -367,6 +363,19 @@ body {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+.messages-list.welcome-state {
+  height: auto;
+  max-height: none;
+  opacity: 1;
+  padding: 0;
+  margin: 0 0 22px;
+  overflow: visible;
+  align-items: center;
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+}
+
 .messages-list::-webkit-scrollbar {
   width: 6px;
 }
@@ -396,6 +405,124 @@ body {
 
 .message-item.assistant {
   align-self: flex-start;
+}
+
+.message-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.message-feedback-status {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.message-feedback-status.positive {
+  color: #a8ffb0;
+}
+
+.message-feedback-status.negative {
+  color: #ffb0b0;
+}
+
+.welcome-card {
+  width: min(680px, 100%);
+  padding: 16px 20px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  margin-bottom: 0;
+  color: inherit;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.feedback-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0.68;
+  transition: background 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.feedback-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.feedback-btn.active {
+  color: #0f3455;
+  background: rgba(255, 255, 255, 0.2);
+  opacity: 1;
+}
+
+.feedback-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.feedback-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: currentColor;
+  opacity: 0.72;
+}
+
+.thinking-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.thinking-indicator span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.thinking-indicator span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.thinking-indicator em {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 13px;
+}
+
+@keyframes thinking-pulse {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+  40% { transform: translateY(-3px); opacity: 1; }
 }
 
 .message-content {
@@ -821,8 +948,6 @@ body {
 /* Resources Section */
 .section-resources {
   padding: 140px 40px 120px;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
   min-height: 100vh;
 }
 
@@ -833,8 +958,6 @@ body {
 .section-homework {
   padding: 140px 40px 140px;
   min-height: 100vh;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
 }
 
 .section-homework .homework-panel {
@@ -864,6 +987,19 @@ body {
   margin: 0;
 }
 
+.resource-library-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin: 42px 0 24px;
+}
+
+.resource-library-header h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
 .filter-bar {
   display: flex;
   gap: 12px;
@@ -871,6 +1007,7 @@ body {
   padding: 6px;
   border-radius: 30px;
   backdrop-filter: blur(10px);
+  flex-wrap: wrap;
 }
 
 .filter-btn {
@@ -901,10 +1038,13 @@ body {
 .resource-card {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
+  border-radius: 8px;
   padding: 24px;
   transition: all 0.3s ease;
   backdrop-filter: blur(15px);
+  display: flex;
+  flex-direction: column;
+  min-height: 210px;
 }
 
 .resource-card:hover {
@@ -916,18 +1056,19 @@ body {
 .card-type {
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.08em;
   opacity: 0.5;
-  margin-bottom: 12px;
+  margin-bottom: 18px;
 }
 
 .resource-card h3 {
-  font-size: 18px;
-  margin: 0 0 12px;
+  font-size: 20px;
+  margin: 0 0 14px;
+  line-height: 1.35;
 }
 
 .resource-card p {
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   opacity: 0.7;
   margin-bottom: 24px;
@@ -937,6 +1078,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  margin-top: auto;
 }
 
 .card-actions {
@@ -1331,6 +1474,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.student-manage-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.student-manage-row input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
 }
 
 .student-row {

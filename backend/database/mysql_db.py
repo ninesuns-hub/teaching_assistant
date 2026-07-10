@@ -152,6 +152,8 @@ class ChatMessage(Base):
     content = Column(Text, nullable=False)
     image_path = Column(String(300), nullable=True)
     retrieved_context = Column(Text, nullable=True)
+    feedback_type = Column(String(20), nullable=True)
+    feedback_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     conversation = relationship("Conversation", back_populates="messages")
@@ -229,6 +231,18 @@ def _migrate_schema():
         try:
             conn.execute(text(
                 "ALTER TABLE chat_messages ADD COLUMN image_path VARCHAR(300) NULL AFTER content"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE chat_messages ADD COLUMN feedback_type VARCHAR(20) NULL AFTER retrieved_context"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE chat_messages ADD COLUMN feedback_at DATETIME NULL AFTER feedback_type"
             ))
         except Exception:
             pass

@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+backend/.venv/
 
 # IDEs
 .vscode/
@@ -16,6 +17,7 @@ venv/
 Thumbs.db
 
 # Project specific
+backend/storage/
 backend/storage/processed/
 backend/storage/secure/users/*.db
 backend/storage/secure/logs/*.log

@@ -123,6 +123,32 @@ def list_class_students(db: Session, class_id: int) -> List[dict]:
     return results
 
 
+def add_student_to_class(db: Session, class_id: int, student_id: int) -> ClassMember:
+    existing = db.query(ClassMember).filter(
+        ClassMember.class_id == class_id,
+        ClassMember.student_id == student_id,
+    ).first()
+    if existing:
+        return existing
+    member = ClassMember(class_id=class_id, student_id=student_id)
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    return member
+
+
+def remove_student_from_class(db: Session, class_id: int, student_id: int) -> bool:
+    member = db.query(ClassMember).filter(
+        ClassMember.class_id == class_id,
+        ClassMember.student_id == student_id,
+    ).first()
+    if not member:
+        return False
+    db.delete(member)
+    db.commit()
+    return True
+
+
 def add_material(
     db: Session,
     class_id: int,

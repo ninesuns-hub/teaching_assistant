@@ -62,6 +62,32 @@ def _build_agent_input(message: str, image_path: Optional[str]) -> str:
     return text
 
 
+def _build_welcome_input(current_user: User, class_name: Optional[str] = None) -> str:
+    if current_user.role == UserRole.TEACHER:
+        class_part = f"当前教师正在管理的班级是“{class_name}”。" if class_name else "当前教师还没有选定班级。"
+        return (
+            "请你以离散数学课程智能助教“小离”的身份，向已经登录的教师做一段自然、完整的自我介绍。"
+            f"{class_part}"
+            "介绍中要说明你可以帮助教师进行课程资料管理、班级学生管理、作业与提交查看、学情分析，以及辅助回答学生常见问题。"
+            "语气要专业、温和、简洁但不要敷衍，长度控制在 2 到 4 个自然段。"
+            "不要提到这是系统触发的介绍，不要说你没有权限，也不要虚构还不存在的数据。"
+        )
+
+    class_part = f"你当前服务的课程班级是“{class_name}”。" if class_name else "当前学生已经登录，但还没有明确课程班级上下文。"
+    return (
+        "请你以离散数学课程智能助教“小离”的身份，向已经登录的学生做一段自我介绍。"
+        f"{class_part}"
+        "介绍中要说明你可以实现的功能，必要时可以分点阐述。"
+        "语气要像课程助教一样亲切、可靠、有一点鼓励感，内容丰富但不要冗长，长度控制在2 到 4 个自然段。"
+        "不要提到这是系统触发的介绍，不要要求用户重新登录。"
+    )
+
+
+def _stream_welcome(agent_input: str, request_context: dict):
+    for chunk in agent.stream_chat(agent_input, request_context=request_context):
+        yield chunk
+
+
 def _stream_and_persist(
     display_message: str,
     agent_input: str,
@@ -159,6 +185,47 @@ async def chat(
         raise HTTPException(status_code=404, detail="图片文件不存在")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/welcome")
+async def chat_welcome(
+    class_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role is None:
+        raise HTTPException(status_code=400, detail="请先选择学生或教师身份")
+
+    from database import class_repo
+
+    class_name = None
+    resolved_class_id = class_id
+    if resolved_class_id is not None and not class_repo.user_can_access_class(db, current_user, resolved_class_id):
+        resolved_class_id = None
+
+    if resolved_class_id is None:
+        user_classes = class_repo.get_user_classes(db, current_user)
+        if user_classes:
+            resolved_class_id = user_classes[0]["id"]
+            class_name = user_classes[0]["name"]
+    else:
+        for item in class_repo.get_user_classes(db, current_user):
+            if item["id"] == resolved_class_id:
+                class_name = item["name"]
+                break
+
+    request_context = {
+        "welcome": True,
+        "user_id": current_user.id,
+        "user_role": current_user.role.value,
+        "class_id": resolved_class_id,
+    }
+    agent_input = _build_welcome_input(current_user, class_name)
+
+    return StreamingResponse(
+        _stream_welcome(agent_input, request_context),
+        media_type="text/event-stream",
+    )
 
 
 @router.get("/chat/images/{user_id}/{filename}")

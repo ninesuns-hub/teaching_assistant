@@ -16,3 +16,10 @@ export async function fetchConversationMessages(conversationId) {
 export async function deleteConversation(conversationId) {
   return request(`/api/conversations/${conversationId}`, { method: 'DELETE' })
 }
+
+export async function submitConversationFeedback(conversationId, messageId, feedbackType) {
+  return request(`/api/conversations/${conversationId}/messages/${messageId}/feedback`, {
+    method: 'POST',
+    body: JSON.stringify({ feedback_type: feedbackType }),
+  })
+}
