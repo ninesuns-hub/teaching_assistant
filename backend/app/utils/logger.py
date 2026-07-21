@@ -11,7 +11,13 @@ def setup_logger() -> logging.Logger:
     if root_logger.handlers:
         root_logger.handlers.clear()
 
-    formatter = logging.Formatter(settings.LOG_FORMAT)
+    # Some deployments use LOG_FORMAT=json as a mode flag rather than a
+    # logging format string. Keep startup resilient and use the readable
+    # default until a dedicated JSON formatter is configured.
+    log_format = settings.LOG_FORMAT
+    if log_format.strip().lower() in {"json", "text", "plain"}:
+        log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    formatter = logging.Formatter(log_format)
 
     # 控制台输出
     console_handler = logging.StreamHandler(sys.stdout)
