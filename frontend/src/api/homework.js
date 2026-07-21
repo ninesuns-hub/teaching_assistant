@@ -39,7 +39,9 @@ async function fetchBlob(path) {
     try {
       const data = await response.json()
       detail = data.detail || data.message || detail
-    } catch (_) {}
+    } catch {
+      // Keep the HTTP status fallback when the response body is not JSON.
+    }
     throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
   }
   return response.blob()
