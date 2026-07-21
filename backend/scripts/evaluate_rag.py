@@ -47,7 +47,7 @@ class LLMAsAJudge:
 ### 输入信息：
 - **问题**: {question}
 - **期待内容 (Ground Truth)**: {expected_content}
-- **系统检索到的参考内容**:
+- **系统检索到的参考内容**: 
 {retrieved_context if retrieved_context else "未检索到内容"}
 - **系统最终回答**: {actual_answer}
 
@@ -86,14 +86,14 @@ def parse_eval_set(file_path: str) -> List[Dict[str, str]]:
     cases = []
     pattern = r"### .*?\n- \*\*问题\*\*: (.*?)\n- \*\*期待内容\*\*: (.*?)\n- \*\*精准定位\*\*: (.*?)(?:\n|$)"
     matches = re.findall(pattern, content, re.DOTALL)
-
+    
     for m in matches:
         cases.append({
             "question": m[0].strip(),
             "expected": m[1].strip(),
             "location": m[2].strip()
         })
-
+    
     return cases
 
 async def run_evaluation():
@@ -110,7 +110,7 @@ async def run_evaluation():
     # 2. 加载测评集
     eval_file = os.path.join(backend_dir, 'storage', 'raw', 'assets', 'evaluation_set', 'discrete_math_eval_set.md')
     test_cases = parse_eval_set(eval_file)
-
+    
     if not test_cases:
         logger.error("未找到任何测试用例，请检查解析逻辑或文件路径。")
         return
@@ -123,7 +123,7 @@ async def run_evaluation():
 
     for i, case in enumerate(test_cases):
         logger.info(f"正在测试 [{i+1}/{len(test_cases)}]: {case['question'][:30]}...")
-
+        
         # 获取 Agent 回答
         actual_answer = ""
         try:
@@ -137,7 +137,7 @@ async def run_evaluation():
 
         # 裁判评分
         evaluation = judge.judge(case['question'], case['expected'], actual_answer, retrieved_context)
-
+        
         result = {
             "id": i + 1,
             "question": case['question'],
@@ -150,11 +150,11 @@ async def run_evaluation():
             "is_pass": evaluation.get("is_pass", False)
         }
         results.append(result)
-
+        
         total_score += result["score"]
         if result["is_pass"]:
             pass_count += 1
-
+        
         logger.info(f"得分: {result['score']} | 是否通过: {result['is_pass']}")
 
     # 3. 生成报告
@@ -166,10 +166,10 @@ async def run_evaluation():
         "average_score": total_score / len(test_cases),
         "details": results
     }
-
+    
     with open(report_path, 'w', encoding='utf-8') as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
-
+    
     logger.info(f"测评完成！报告已保存至: {report_path}")
     logger.info(f"平均分: {summary['average_score']:.2f} | 通过率: {summary['pass_rate']}")
 

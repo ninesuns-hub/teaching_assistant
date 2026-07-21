@@ -88,17 +88,62 @@ function MarkdownCode({ inline, className, children, ...props }) {
   )
 }
 
+function normalizeMathContent(content) {
+  if (!content) return ''
+
+  // 先保护 fenced code（含 mermaid），避免被公式预处理破坏
+  const fences = []
+  let text = content.replace(/```[\s\S]*?```/g, (block) => {
+    const key = `@@FENCE_${fences.length}@@`
+    fences.push(block)
+    return key
+  })
+
+  text = text
+    // \( ... \) → $...$
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, expr) => `$${expr.trim()}$`)
+    // \[ ... \] → $$...$$
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, expr) => `\n$$\n${expr.trim()}\n$$\n`)
+
+  // 修复矩阵行分隔：\begin{...}...\end{...} 内的 "\ " → \\
+  text = text.replace(
+    /(\\begin\{(?:bmatrix|pmatrix|vmatrix|Bmatrix|matrix|array)\}[\s\S]*?\\end\{(?:bmatrix|pmatrix|vmatrix|Bmatrix|matrix|array)\})/g,
+    (block) => block
+      .replace(/\\\s+(?=\d|\\|[a-zA-Z])/g, '\\\\ ')
+      .replace(/\\\n/g, '\\\\\n'),
+  )
+
+  // [ ...含 LaTeX 命令... ] → $$...$$（模型常误用方括号）
+  text = text.replace(
+    /\[\s*([^[\]]*(?:\\begin\{|\\boxed\{|\\frac\{|\\cdot|\\times|\\to|\\rightarrow)[^[\]]*?)\]/g,
+    (_, expr) => {
+      const trimmed = expr.trim()
+      if (!trimmed || trimmed.length > 2000) return `[${expr}]`
+      return `\n$$\n${trimmed}\n$$\n`
+    },
+  )
+
+  // 还原 code fence
+  fences.forEach((block, i) => {
+    text = text.replace(`@@FENCE_${i}@@`, block)
+  })
+
+  return text
+}
+
 export default function MarkdownMessage({ content }) {
+  const normalized = useMemo(() => normalizeMathContent(content), [content])
+
   return (
     <div className="markdown-message">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
+        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
         components={{
           code: MarkdownCode,
         }}
       >
-        {content}
+        {normalized}
       </ReactMarkdown>
     </div>
   )

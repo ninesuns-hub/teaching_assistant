@@ -1,14 +1,6 @@
-# 在线访问
-
-本项目前端页面会在 `main` 分支更新后通过 GitHub Pages 自动部署，可通过以下地址访问：
-
-<https://ninesuns-hub.github.io/teaching_assistant/>
-
----
-
 # 离散数学助教Agent 修改意见
 
-**日期**：2026/5/12
+**日期**：2026/5/12  
 **作者**：刘源昊
 
 ---

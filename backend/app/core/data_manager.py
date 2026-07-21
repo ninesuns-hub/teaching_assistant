@@ -22,6 +22,8 @@ class DataManager:
         """确保所有存储目录存在"""
         dirs = [
             settings.COURSE_ASSETS_DIR,
+            settings.CLASS_MATERIALS_DIR,
+            settings.HOMEWORK_DIR,
             settings.CHUNKS_DIR,
             os.path.dirname(settings.SQLITE_DB_PATH),
             os.path.dirname(settings.LOG_FILE)
@@ -41,10 +43,55 @@ class DataManager:
 
             if auto_ingest:
                 self.ingest_file(target_path)
-
+            
             return {"status": "success", "path": target_path}
         except Exception as e:
             logger.error(f"保存文件失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def save_class_material(self, file_content: bytes, filename: str, class_id: int, auto_ingest: bool = True):
+        """保存班级学习资料并触发 RAG 入库"""
+        class_dir = os.path.join(settings.CLASS_MATERIALS_DIR, str(class_id))
+        os.makedirs(class_dir, exist_ok=True)
+        target_path = os.path.join(class_dir, filename)
+        try:
+            with open(target_path, "wb") as f:
+                f.write(file_content)
+            logger.info(f"班级资料已保存至: {target_path}")
+            if auto_ingest:
+                self.ingest_file(target_path)
+            return {"status": "success", "path": target_path}
+        except Exception as e:
+            logger.error(f"保存班级资料失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def save_homework_file(
+        self,
+        file_content: bytes,
+        filename: str,
+        class_id: int,
+        kind: str = "assignment",
+        homework_id: int | None = None,
+        student_id: int | None = None,
+    ):
+        """保存作业附件或学生提交文件（不入库 RAG）"""
+        parts = [settings.HOMEWORK_DIR, str(class_id)]
+        if kind == "submission" and homework_id is not None:
+            parts.extend(["submissions", str(homework_id)])
+            if student_id is not None:
+                parts.append(str(student_id))
+        else:
+            parts.append("assignments")
+        target_dir = os.path.join(*parts)
+        os.makedirs(target_dir, exist_ok=True)
+        target_path = os.path.join(target_dir, filename)
+        try:
+            with open(target_path, "wb") as f:
+                f.write(file_content)
+            logger.info(f"作业文件已保存至: {target_path}")
+            return {"status": "success", "path": target_path}
+        except Exception as e:
+            logger.error(f"保存作业文件失败: {e}")
             return {"status": "error", "message": str(e)}
 
     def ingest_file(self, file_path: str):
@@ -54,7 +101,7 @@ class DataManager:
         logger.info(f"开始处理文件入库: {file_path}")
         ext = file_path.lower()
         chunks = []
-
+        
         if ext.endswith((".pptx", ".ppsx")):
             chunks = self.processor.pptx_parser.parse(file_path)
         elif ext.endswith(".pdf"):

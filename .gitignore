@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+backend/.venv/
 .env
 
 # IDEs
@@ -17,10 +18,12 @@ venv/
 Thumbs.db
 
 # Project specific
+backend/storage/
 backend/storage/processed/
 backend/storage/secure/users/*.db
 backend/storage/secure/logs/*.log
 backend/storage/raw/courses/*
 !backend/storage/raw/courses/.gitkeep
 backend/agent_core/config/.env
-backend/.venv
+
+tmp/
