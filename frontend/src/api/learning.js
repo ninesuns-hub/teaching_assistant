@@ -42,3 +42,6 @@ export async function fetchReportDetail(reportId) {
 export async function fetchFeedbackDetail(feedbackId) {
   return request(`/api/learning/feedback/${feedbackId}`)
 }
+export async function fetchLearningAssistantStatus(classId) {
+  return request(`/api/learning/assistant-status?class_id=${classId}`)
+}

@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from typing import List, Optional
 
@@ -164,3 +165,24 @@ def count_student_messages_in_class(db: Session, student_id: int, class_id: int)
     if not conv_ids:
         return 0
     return db.query(ChatMessage).filter(ChatMessage.conversation_id.in_(conv_ids)).count()
+
+_TRIVIAL_STUDENT_MESSAGES = {
+    "你好", "您好", "嗨", "哈喽", "hello", "hi", "谢谢", "谢谢你", "好的", "好", "收到",
+    "再见", "拜拜", "ok", "okay", "test", "测试",
+}
+
+
+def count_effective_student_questions_in_class(db: Session, student_id: int, class_id: int) -> int:
+    """Count meaningful student turns for the learning-assistant readiness hint."""
+    messages = get_student_messages_in_class(db, student_id, class_id)
+    count = 0
+    for message in messages:
+        if message.get("role") != "user":
+            continue
+        content = (message.get("content") or "").strip()
+        normalized = re.sub(r"[\s\W_]+", "", content.lower(), flags=re.UNICODE)
+        if message.get("image_path"):
+            count += 1
+        elif normalized and normalized not in _TRIVIAL_STUDENT_MESSAGES and len(normalized) >= 3:
+            count += 1
+    return count

@@ -49,7 +49,7 @@ async def send_code(payload: SendCodeRequest):
 
 
 @router.post("/register", response_model=Token)
-async def register(user_data: UserRegister, db: Session = Depends(get_db)):
+def register(user_data: UserRegister, db: Session = Depends(get_db)):
     email = user_data.email.strip().lower()
     if not is_valid_tongji_email(email):
         raise HTTPException(status_code=400, detail="请使用同济大学学校邮箱，格式：7位学号@tongji.edu.cn")
@@ -76,7 +76,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
+def login(user_data: UserLogin, db: Session = Depends(get_db)):
     email = user_data.email.strip().lower()
     db_user = db.query(User).filter(User.email == email).first()
     if not db_user or not verify_password(user_data.password, db_user.hashed_password):
@@ -85,7 +85,7 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.post("/select-role", response_model=Token)
-async def select_role(
+def select_role(
     payload: SelectRoleRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -104,7 +104,7 @@ async def select_role(
 
 
 @router.get("/me", response_model=UserProfile)
-async def get_me(current_user: User = Depends(get_current_user)):
+def get_me(current_user: User = Depends(get_current_user)):
     return UserProfile(
         id=current_user.id,
         email=current_user.email,

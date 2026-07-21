@@ -1,4 +1,7 @@
+import logging
+
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Enum, ForeignKey, BigInteger, UniqueConstraint
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import enum
@@ -9,7 +12,19 @@ from agent_core.config.settings import settings
 
 SQLALCHEMY_DATABASE_URL = f"mysql+mysqlconnector://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DB}"
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+logger = logging.getLogger(__name__)
+
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    pool_timeout=5,
+    connect_args={
+        "connection_timeout": 5,
+        "read_timeout": 10,
+        "write_timeout": 10,
+    },
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -196,8 +211,12 @@ def init_mysql():
         import mysql.connector
         conn = mysql.connector.connect(
             host=settings.MYSQL_HOST,
+            port=settings.MYSQL_PORT,
             user=settings.MYSQL_USER,
             password=settings.MYSQL_PASSWORD,
+            connection_timeout=5,
+            read_timeout=10,
+            write_timeout=10,
         )
         cursor = conn.cursor()
         cursor.execute(
@@ -208,8 +227,13 @@ def init_mysql():
     except Exception as e:
         print(f"Error creating database: {e}")
 
-    Base.metadata.create_all(bind=engine)
-    _migrate_schema()
+    try:
+        Base.metadata.create_all(bind=engine)
+        _migrate_schema()
+    except SQLAlchemyError as exc:
+        # Database availability must not prevent the API process from starting.
+        # Requests will receive a controlled 503 until MySQL recovers.
+        logger.error("数据库初始化暂不可用: %s", exc)
 
 
 def _migrate_schema():

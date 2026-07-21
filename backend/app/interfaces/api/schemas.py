@@ -144,6 +144,7 @@ class StudentBriefResponse(BaseModel):
     email: str
     joined_at: str | None
     message_count: int = 0
+    effective_question_count: int = 0
 
 
 class LearningReportResponse(BaseModel):

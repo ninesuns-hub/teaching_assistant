@@ -48,7 +48,7 @@ def _serialize_homework(hw, submission_count: int = 0, my_submission: dict | Non
 
 
 @router.get("/classes/{class_id}/homeworks", response_model=list[HomeworkResponse])
-async def list_homeworks(
+def list_homeworks(
     class_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -117,7 +117,7 @@ async def create_homework(
 
 
 @router.delete("/homeworks/{homework_id}")
-async def delete_homework(
+def delete_homework(
     homework_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
@@ -132,7 +132,7 @@ async def delete_homework(
 
 
 @router.get("/homeworks/{homework_id}/attachment")
-async def download_homework_attachment(
+def download_homework_attachment(
     homework_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -217,7 +217,7 @@ async def submit_homework(
 
 
 @router.get("/homeworks/{homework_id}/submissions", response_model=list[HomeworkSubmissionResponse])
-async def list_homework_submissions(
+def list_homework_submissions(
     homework_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
@@ -232,7 +232,7 @@ async def list_homework_submissions(
 
 
 @router.get("/submissions/{submission_id}/file")
-async def download_submission_file(
+def download_submission_file(
     submission_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

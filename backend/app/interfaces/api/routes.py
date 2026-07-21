@@ -68,8 +68,9 @@ def _build_welcome_input(current_user: User, class_name: Optional[str] = None) -
         return (
             "请你以离散数学课程智能助教“小离”的身份，向已经登录的教师做一段自然、完整的自我介绍。"
             f"{class_part}"
-            "介绍中要说明你可以帮助教师进行课程资料管理、班级学生管理、作业与提交查看、学情分析，以及辅助回答学生常见问题。"
-            "语气要专业、温和、简洁但不要敷衍，长度控制在 2 到 4 个自然段。"
+            "介绍中要说明你可以帮助教师进行课程资料管理、班级学生管理、作业与提交查看、学情分析，以及辅助回答学生常见问题，不用全部涉及。"
+            "语气要专业、温和、简洁但不要敷衍，长度控制在 2 到 4 个自然段，开头和结尾保持简洁清晰简单引入、收束即可，不要过于冗长。"
+            "分点阐述但不超过5点，介绍过程中不要重复，可以加上类似“😊”这样的表情但不要太多（一两个即可）。"
             "不要提到这是系统触发的介绍，不要说你没有权限，也不要虚构还不存在的数据。"
         )
 
@@ -77,9 +78,24 @@ def _build_welcome_input(current_user: User, class_name: Optional[str] = None) -
     return (
         "请你以离散数学课程智能助教“小离”的身份，向已经登录的学生做一段自我介绍。"
         f"{class_part}"
-        "介绍中要说明你可以实现的功能，必要时可以分点阐述。"
+        "介绍中要说明你可以实现的功能，必要时可以分点阐述，不超过5个能力点。"
         "语气要像课程助教一样亲切、可靠、有一点鼓励感，内容丰富但不要冗长，长度控制在2 到 4 个自然段。"
         "不要提到这是系统触发的介绍，不要要求用户重新登录。"
+        "可以参考下面示例的结构与语言，但不要照搬示例内容：\n"
+        "【参考示例】\n"
+        "你好！我是**小离**，你的离散数学课程智能助教 😊\n\n"
+        "我的职责包括：\n\n"
+        "- 耐心解答你关于离散数学的各种问题"
+        "（集合论、逻辑、图论、代数结构、组合数学等）。\n"
+        "- 基于课程课件或通用知识，用简洁、清晰的方式解释概念，"
+        "先给结论再举例。\n"
+        "- 支持 Markdown 排版、LaTeX 数学公式、Mermaid 图形"
+        "（如 Hasse 图、树、图等）。\n"
+        "- 如果你上传图片，我也会尽量读取并帮助分析。\n"
+        "- 如果有课程行政问题（老师、评分、课表等），"
+        "我也可以查询相关信息。\n"
+        "- 如果问题与离散数学无关，我会礼貌地引导回课程话题。\n\n"
+        "有任何离散数学的问题，尽管问我吧！\n\n"
     )
 
 
@@ -131,7 +147,7 @@ def _stream_and_persist(
 
 
 @router.post("/chat")
-async def chat(
+def chat(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -188,7 +204,7 @@ async def chat(
 
 
 @router.post("/chat/welcome")
-async def chat_welcome(
+def chat_welcome(
     class_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -229,7 +245,7 @@ async def chat_welcome(
 
 
 @router.get("/chat/images/{user_id}/{filename}")
-async def get_chat_image(
+def get_chat_image(
     user_id: int,
     filename: str,
     current_user: User = Depends(get_current_user),
@@ -245,7 +261,7 @@ async def get_chat_image(
 
 
 @router.post("/reset")
-async def reset(current_user: User = Depends(get_current_user)):
+def reset(current_user: User = Depends(get_current_user)):
     agent.reset()
     return {"message": "对话已重置"}
 
@@ -264,5 +280,5 @@ async def upload_file(
 
 
 @router.get("/files")
-async def list_files(current_user: User = Depends(get_current_user)):
+def list_files(current_user: User = Depends(get_current_user)):
     return {"files": data_manager.get_all_course_files()}

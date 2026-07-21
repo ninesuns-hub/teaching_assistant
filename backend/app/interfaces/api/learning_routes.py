@@ -21,7 +21,7 @@ def _ensure_teacher_class_access(db: Session, user: User, class_id: int):
 
 
 @router.get("/classes/{class_id}/students", response_model=list[StudentBriefResponse])
-async def list_class_students(
+def list_class_students(
     class_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
@@ -35,13 +35,16 @@ async def list_class_students(
             email=s["email"],
             joined_at=s["joined_at"],
             message_count=conversation_repo.count_student_messages_in_class(db, s["id"], class_id),
+            effective_question_count=conversation_repo.count_effective_student_questions_in_class(
+                db, s["id"], class_id
+            ),
         )
         for s in students
     ]
 
 
 @router.post("/classes/{class_id}/students", response_model=StudentBriefResponse)
-async def add_class_student(
+def add_class_student(
     class_id: int,
     payload: AddStudentRequest,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
@@ -65,11 +68,14 @@ async def add_class_student(
         email=student.email,
         joined_at=member.joined_at.isoformat() if member.joined_at else None,
         message_count=conversation_repo.count_student_messages_in_class(db, student.id, class_id),
+        effective_question_count=conversation_repo.count_effective_student_questions_in_class(
+            db, student.id, class_id
+        ),
     )
 
 
 @router.delete("/classes/{class_id}/students/{student_id}")
-async def remove_class_student(
+def remove_class_student(
     class_id: int,
     student_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
@@ -83,7 +89,7 @@ async def remove_class_student(
 
 
 @router.post("/classes/{class_id}/students/{student_id}/report", response_model=LearningReportResponse)
-async def create_student_report(
+def create_student_report(
     class_id: int,
     student_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
@@ -100,7 +106,7 @@ async def create_student_report(
 
 
 @router.get("/classes/{class_id}/students/{student_id}/reports", response_model=list[LearningReportResponse])
-async def list_student_reports(
+def list_student_reports(
     class_id: int,
     student_id: int,
     current_user: User = Depends(get_current_user),
@@ -122,7 +128,7 @@ async def list_student_reports(
 
 
 @router.get("/reports/{report_id}", response_model=LearningReportResponse)
-async def get_report_detail(
+def get_report_detail(
     report_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -141,7 +147,7 @@ async def get_report_detail(
 
 
 @router.post("/classes/{class_id}/feedback", response_model=ClassFeedbackResponse)
-async def create_class_feedback(
+def create_class_feedback(
     class_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
@@ -154,7 +160,7 @@ async def create_class_feedback(
 
 
 @router.get("/classes/{class_id}/feedback", response_model=list[ClassFeedbackResponse])
-async def list_class_feedback(
+def list_class_feedback(
     class_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
@@ -165,7 +171,7 @@ async def list_class_feedback(
 
 
 @router.get("/feedback/{feedback_id}", response_model=ClassFeedbackResponse)
-async def get_feedback_detail(
+def get_feedback_detail(
     feedback_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
@@ -179,7 +185,7 @@ async def get_feedback_detail(
 
 
 @router.post("/me/report", response_model=LearningReportResponse)
-async def create_my_report(
+def create_my_report(
     class_id: int = Query(...),
     current_user: User = Depends(require_role(UserRole.STUDENT)),
     db: Session = Depends(get_db),
@@ -190,3 +196,71 @@ async def create_my_report(
         return generate_student_report(db, current_user.id, class_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/assistant-status")
+def get_learning_assistant_status(
+    class_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the compact, role-aware state used by the chat-page mascot."""
+    readiness_threshold = 5
+
+    if current_user.role == UserRole.STUDENT:
+        if not class_repo.user_can_access_class(db, current_user, class_id):
+            raise HTTPException(status_code=403, detail="您尚未加入该班级")
+
+        effective_count = conversation_repo.count_effective_student_questions_in_class(
+            db, current_user.id, class_id
+        )
+        total_message_count = conversation_repo.count_student_messages_in_class(
+            db, current_user.id, class_id
+        )
+        reports = learning_repo.list_student_reports(db, current_user.id, class_id, limit=1)
+        latest_report = _serialize_report(reports[0], current_user.name) if reports else None
+        return {
+            "role": "student",
+            "class_id": class_id,
+            "effective_question_count": effective_count,
+            "can_generate": effective_count >= readiness_threshold,
+            "has_updates": bool(latest_report and total_message_count > latest_report["message_count"]),
+            "latest_report": latest_report,
+        }
+
+    if current_user.role == UserRole.TEACHER:
+        _ensure_teacher_class_access(db, current_user, class_id)
+        students = class_repo.list_class_students(db, class_id)
+        student_states = []
+        for student in students:
+            effective_count = conversation_repo.count_effective_student_questions_in_class(
+                db, student["id"], class_id
+            )
+            reports = learning_repo.list_student_reports(db, student["id"], class_id, limit=1)
+            student_states.append({
+                "id": student["id"],
+                "name": student["name"],
+                "effective_question_count": effective_count,
+                "ready": effective_count >= readiness_threshold,
+                "latest_report": _serialize_report(reports[0], student["name"]) if reports else None,
+            })
+
+        feedbacks = learning_repo.list_class_feedback(db, class_id, limit=1)
+        active_students = sum(1 for student in student_states if student["effective_question_count"] > 0)
+        return {
+            "role": "teacher",
+            "class_id": class_id,
+            "student_count": len(student_states),
+            "active_students": active_students,
+            "ready_students": sum(1 for student in student_states if student["ready"]),
+            "total_effective_questions": sum(
+                student["effective_question_count"] for student in student_states
+            ),
+            "students": sorted(
+                student_states,
+                key=lambda student: (student["ready"], student["effective_question_count"]),
+                reverse=True,
+            ),
+            "latest_feedback": _serialize_feedback(feedbacks[0]) if feedbacks else None,
+        }
+
+    raise HTTPException(status_code=400, detail="请先选择身份")

@@ -64,7 +64,7 @@ def _build_pptx_preview_html(file_path: str, filename: str) -> str:
 
 
 @router.post("", response_model=ClassResponse)
-async def create_class(
+def create_class(
     payload: CreateClassRequest,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
@@ -82,7 +82,7 @@ async def create_class(
 
 
 @router.get("/mine", response_model=list[ClassResponse])
-async def list_my_classes(
+def list_my_classes(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -92,7 +92,7 @@ async def list_my_classes(
 
 
 @router.post("/join", response_model=ClassResponse)
-async def join_class(
+def join_class(
     payload: JoinClassRequest,
     current_user: User = Depends(require_role(UserRole.STUDENT)),
     db: Session = Depends(get_db),
@@ -111,7 +111,7 @@ async def join_class(
 
 
 @router.get("/{class_id}/materials", response_model=list[MaterialResponse])
-async def list_class_materials(
+def list_class_materials(
     class_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -177,7 +177,7 @@ async def upload_class_material(
 
 
 @router.get("/{class_id}/materials/{material_id}/file")
-async def get_class_material_file(
+def get_class_material_file(
     class_id: int,
     material_id: int,
     download: bool = Query(False, description="true 为下载，false 为在线预览（PDF）"),
@@ -209,7 +209,7 @@ async def get_class_material_file(
 
 
 @router.get("/{class_id}/materials/{material_id}/preview", response_class=HTMLResponse)
-async def preview_class_material(
+def preview_class_material(
     class_id: int,
     material_id: int,
     current_user: User = Depends(get_current_user),

@@ -12,6 +12,7 @@ import {
   generateMyReport,
   generateClassFeedback,
   fetchStudentReports,
+  fetchLearningAssistantStatus,
 } from './api/learning'
 import {
   fetchHomeworks,
@@ -24,6 +25,7 @@ import {
 } from './api/homework'
 import { getStoredUser, setAuth, clearAuth, getToken } from './api/httpClient'
 import MarkdownMessage from './components/MarkdownMessage'
+import LearningMascot, { LearningReportDrawer } from './components/LearningMascot'
 import logoImg from './assets/logo.png'
 
 const SCENE_OPTIONS = [
@@ -95,6 +97,8 @@ const TRANSLATIONS = {
     navClasses: 'Classes',
     navHomework: 'Homework',
     navMore: 'More',
+    exampleQuestions: 'Example questions',
+    refreshExamples: 'Try another set',
     homeworkPageTitle: 'Homework',
     view: 'View',
     download: 'Download',
@@ -121,6 +125,9 @@ const TRANSLATIONS = {
       confirmPassword: 'Confirm Password',
       loginBtn: 'Login',
       signupBtn: 'Sign up',
+      loggingIn: 'Logging in…',
+      signingUp: 'Creating account…',
+      serviceUnavailable: 'The service is not responding. Please try again shortly.',
       noAccount: "Don't have an account?",
       hasAccount: 'Already have an account?',
       backToHome: 'Back to Home',
@@ -149,7 +156,7 @@ const TRANSLATIONS = {
       generateClassFeedback: 'Generate Class Feedback',
       viewFeedback: 'View Feedback',
       generating: 'Generating...',
-      messagesCount: 'Messages',
+      messagesCount: 'Meaningful learning exchanges',
       noStudents: 'No students in class yet',
       expandStudents: 'Expand',
       collapseStudents: 'Collapse',
@@ -212,6 +219,8 @@ const TRANSLATIONS = {
     navClasses: '我的班级',
     navHomework: '作业',
     navMore: '更多',
+    exampleQuestions: '示例问题',
+    refreshExamples: '换一换',
     homeworkPageTitle: '作业',
     view: '查看',
     download: '下载',
@@ -238,6 +247,9 @@ const TRANSLATIONS = {
       confirmPassword: '确认密码',
       loginBtn: '登录',
       signupBtn: '注册',
+      loggingIn: '登录中…',
+      signingUp: '正在创建账号…',
+      serviceUnavailable: '服务暂时无响应，请稍后再试。',
       noAccount: '还没有账号？',
       hasAccount: '已有账号？',
       backToHome: '返回首页',
@@ -266,7 +278,7 @@ const TRANSLATIONS = {
       generateClassFeedback: '生成班级学情反馈',
       viewFeedback: '查看班级反馈',
       generating: '生成中...',
-      messagesCount: '对话数',
+      messagesCount: '有效学习交流',
       noStudents: '班级暂无学生',
       expandStudents: '展开',
       collapseStudents: '收起',
@@ -328,6 +340,56 @@ const SCENE_QUOTES = {
 }
 
 const RESOURCE_FILTERS = ['All', 'Slides', 'Notes', 'Practice', 'Books']
+const EXAMPLE_PROMPT_GROUPS = {
+  zh: {
+    student: [
+      [
+        '为什么蕴含命题只有在前件为真、后件为假时才是假命题？请结合具体例子说明。',
+        '如何用反证法证明：若 n² 是偶数，则 n 是偶数？',
+        '给定一个二元关系后，怎样依次判断它是否具有自反性、对称性和传递性？',
+      ],
+      [
+        '如何用真值表判断 `(p→q)↔(¬q→¬p)` 是否为重言式？',
+        '数学归纳法中的基础步骤和归纳步骤分别起什么作用？缺少其中一步会怎样？',
+        '等价关系如何将一个集合划分为等价类？请用模 3 同余关系说明。',
+      ],
+      [
+        '判断一个函数是单射、满射还是双射时，分别需要检查哪些条件？请配合例子说明。',
+        '一个连通图在什么条件下存在欧拉通路或欧拉回路？应该如何快速判断？',
+        '什么时候应该使用加法原理、乘法原理、排列或组合？请结合具体情形对比说明。',
+      ],
+    ],
+    teacher: [
+      ['设计一节“命题逻辑”课的教学流程', '生成一道图论练习题并给出评分要点', '总结学生学习数学归纳法时的常见误区'],
+      ['设计集合与关系章节的课堂活动', '生成一道真值表练习并给出参考答案', '设计一组由基础到进阶的组合计数题'],
+      ['给出讲解“等价关系”的课堂案例', '设计图论章节的课堂讨论问题', '制定离散数学阶段测验的知识点分布'],
+    ],
+  },
+  en: {
+    student: [
+      [
+        'Why is an implication false only when its premise is true and its conclusion is false? Explain with a concrete example.',
+        'How can contradiction prove that if n² is even, then n is even?',
+        'For a binary relation, how can reflexivity, symmetry, and transitivity be checked step by step?',
+      ],
+      [
+        'How can a truth table show whether `(p→q)↔(¬q→¬p)` is a tautology?',
+        'What roles do the base case and inductive step play in induction, and what fails if either is missing?',
+        'How does an equivalence relation partition a set into equivalence classes? Use congruence modulo 3 as an example.',
+      ],
+      [
+        'What conditions distinguish injective, surjective, and bijective functions? Explain with examples.',
+        'When does a connected graph have an Euler path or Euler circuit, and how can this be checked quickly?',
+        'When should the addition rule, multiplication rule, permutations, or combinations be used? Compare concrete cases.',
+      ],
+    ],
+    teacher: [
+      ['Design a lesson flow for propositional logic', 'Create a graph theory exercise with a scoring rubric', 'Summarize common misconceptions about mathematical induction'],
+      ['Design a classroom activity for sets and relations', 'Create a truth-table exercise with a reference answer', 'Design a progression of counting problems from basic to advanced'],
+      ['Give a classroom example for teaching equivalence relations', 'Design discussion questions for a graph theory lesson', 'Plan the topic distribution for a discrete mathematics assessment'],
+    ],
+  },
+}
 const CODE_COOLDOWN_SEC = 60
 const CODE_COOLDOWN_KEY = 'verify_code_cooldown'
 const TONGJI_EMAIL_RE = /^[0-9]{7}@tongji\.edu\.cn$/
@@ -469,31 +531,36 @@ function App() {
   const [reportModal, setReportModal] = useState(null)
   const [feedbackModal, setFeedbackModal] = useState(null)
   const [generatingLearning, setGeneratingLearning] = useState(false)
+  const [learningAssistantOpen, setLearningAssistantOpen] = useState(false)
+  const [learningAssistantStatus, setLearningAssistantStatus] = useState(null)
+  const [learningAssistantLoading, setLearningAssistantLoading] = useState(false)
+  const [learningAssistantError, setLearningAssistantError] = useState('')
+  const [learningDrawer, setLearningDrawer] = useState(null)
   const [pendingImage, setPendingImage] = useState(null)
   const imageInputRef = useRef(null)
   const welcomeRequestRef = useRef(null)
-  const [language, setLanguage] = useState('en')
+  const [language, setLanguage] = useState('zh')
   const [activeFilter, setActiveFilter] = useState('All')
-  const [scrollPos, setScrollPos] = useState(0)
   const [activeSection, setActiveSection] = useState('chat')
+  const [exampleGroupIndex, setExampleGroupIndex] = useState(0)
   
   const [dialRotation, setDialRotation] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const dragRef = useRef({ startX: 0, startRot: 0 })
-  const containerRef = useRef(null)
   const messagesEndRef = useRef(null)
+  const composerInputRef = useRef(null)
 
   const t = TRANSLATIONS[language]
   const isTeacher = user?.role === 'teacher'
   const isStudent = user?.role === 'student'
   const secondPageTitle = isTeacher ? t.teacherPageTitle : t.resourcesTitle
-  const scrollHint = isTeacher ? t.scrollDownTeacher : isStudent ? t.scrollDownStudent : t.scrollDown
-  const pageBlend = useMemo(() => Math.min(1, Math.max(0, scrollPos)), [scrollPos])
   const activeClass = useMemo(
     () => classes.find(c => c.id === activeClassId) || null,
     [classes, activeClassId],
   )
   const canChat = Boolean(user?.role && !user.needs_role_selection)
+  const exampleGroups = EXAMPLE_PROMPT_GROUPS[language]?.[user?.role] || []
+  const visibleExamplePrompts = exampleGroups[exampleGroupIndex] || []
 
   const welcomeText = useMemo(() => {
     if (!user) return t.auth.welcomeGuest
@@ -563,22 +630,11 @@ function App() {
     }
   }, [activeClassId, loadMaterials, loadHomeworks])
 
-  const scrollToSection = useCallback((target) => {
-    const container = containerRef.current
-    if (!container) return
-    if (target === 'chat' || target === 'section-chat') {
-      container.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-    const el = document.getElementById(target)
-    if (!el) {
-      container.scrollTo({ top: window.innerHeight, behavior: 'smooth' })
-      return
-    }
-    const cRect = container.getBoundingClientRect()
-    const eRect = el.getBoundingClientRect()
-    const top = eRect.top - cRect.top + container.scrollTop
-    container.scrollTo({ top, behavior: 'smooth' })
+  const handleSectionChange = useCallback((target) => {
+    setActiveSection(target)
+    setSidebarOpen(false)
+    setSettingsOpen(false)
+    setLearningAssistantOpen(false)
   }, [])
 
   const loadConversations = useCallback(async () => {
@@ -632,6 +688,44 @@ function App() {
     }
   }, [user?.role])
 
+  const loadLearningAssistantStatus = useCallback(async (classId) => {
+    if (!classId || !user?.role) {
+      setLearningAssistantStatus(null)
+      return
+    }
+    setLearningAssistantLoading(true)
+    setLearningAssistantError('')
+    try {
+      setLearningAssistantStatus(await fetchLearningAssistantStatus(classId))
+    } catch (err) {
+      console.error(err)
+      if (user?.role === 'teacher') {
+        const fallbackStudents = students.map(student => ({
+          id: student.id,
+          name: student.name,
+          effective_question_count: student.effective_question_count ?? 0,
+          message_count: student.message_count ?? 0,
+          ready: (student.effective_question_count ?? 0) >= 5,
+          latest_report: null,
+        }))
+        setLearningAssistantStatus({
+          role: 'teacher',
+          class_id: classId,
+          student_count: fallbackStudents.length,
+          active_students: fallbackStudents.filter(student => student.message_count > 0).length,
+          ready_students: fallbackStudents.filter(student => student.ready).length,
+          students: fallbackStudents,
+          latest_feedback: null,
+          fallback: true,
+        })
+        setLearningAssistantError(language === 'zh' ? '详细学情还在同步，先为你显示班级里的最新记录。' : 'Detailed learning data is syncing. Showing the latest class records for now.')
+      } else {
+        setLearningAssistantError(language === 'zh' ? '学习记录还在同步，稍后再来看看吧。' : 'Your learning records are still syncing. Please check again shortly.')
+      }
+    } finally {
+      setLearningAssistantLoading(false)
+    }
+  }, [user?.role, language, students])
   useEffect(() => {
     if (user?.role) loadLatestConversation()
   }, [user?.role, loadLatestConversation])
@@ -667,6 +761,14 @@ function App() {
   }, [activeClassId, isTeacher, loadStudents])
 
   useEffect(() => {
+    if (isSending) return undefined
+    const timer = window.setTimeout(() => {
+      if (activeClassId && user?.role) loadLearningAssistantStatus(activeClassId)
+      else setLearningAssistantStatus(null)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [isSending, activeClassId, user?.role, loadLearningAssistantStatus])
+  useEffect(() => {
     if (authModal === 'signup' && authForm.email) {
       setCodeCooldown(getRemainingCooldown(authForm.email))
     }
@@ -687,6 +789,7 @@ function App() {
     }
     setAuth(data.access_token, nextUser)
     setUser(nextUser)
+    setExampleGroupIndex(0)
     setAuthModal(null)
     if (data.needs_role_selection) setRoleModalOpen(true)
   }
@@ -712,7 +815,7 @@ function App() {
     try {
       await sendCode(email)
     } catch (err) {
-      setAuthError(err.message)
+      setAuthError(['REQUEST_TIMEOUT', 'SERVICE_UNAVAILABLE'].includes(err.code) ? t.auth.serviceUnavailable : err.message)
     } finally {
       setSendingCode(false)
     }
@@ -732,7 +835,7 @@ function App() {
       })
       handleAuthSuccess(data)
     } catch (err) {
-      setAuthError(err.message)
+      setAuthError(['REQUEST_TIMEOUT', 'SERVICE_UNAVAILABLE'].includes(err.code) ? t.auth.serviceUnavailable : err.message)
     } finally {
       setAuthLoading(false)
     }
@@ -749,7 +852,7 @@ function App() {
       })
       handleAuthSuccess(data)
     } catch (err) {
-      setAuthError(err.message)
+      setAuthError(['REQUEST_TIMEOUT', 'SERVICE_UNAVAILABLE'].includes(err.code) ? t.auth.serviceUnavailable : err.message)
     } finally {
       setAuthLoading(false)
     }
@@ -761,6 +864,7 @@ function App() {
       const nextUser = { ...user, role: data.role, needs_role_selection: false }
       setAuth(data.access_token, nextUser)
       setUser(nextUser)
+      setExampleGroupIndex(0)
       setRoleModalOpen(false)
     } catch (err) {
       setAuthError(err.message)
@@ -769,7 +873,9 @@ function App() {
 
   const handleLogout = () => {
     clearAuth()
+    setActiveSection('chat')
     setUser(null)
+    setExampleGroupIndex(0)
     welcomeRequestRef.current = null
     setWelcomeContent('')
     setWelcomeLoading(false)
@@ -797,6 +903,7 @@ function App() {
     setMessages([])
     welcomeRequestRef.current = null
     setWelcomeContent('')
+    setExampleGroupIndex(0)
   }
 
   const handleSelectConversation = async (id) => {
@@ -873,6 +980,55 @@ function App() {
     }
   }
 
+  const handleLearningAssistantToggle = () => {
+    const nextOpen = !learningAssistantOpen
+    setLearningAssistantOpen(nextOpen)
+    if (nextOpen && activeClassId) loadLearningAssistantStatus(activeClassId)
+  }
+
+  const handleAssistantGenerate = async () => {
+    if (!activeClassId || generatingLearning) return
+    setGeneratingLearning(true)
+    setLearningAssistantError('')
+    try {
+      if (isTeacher) {
+        const feedback = await generateClassFeedback(activeClassId)
+        setLearningDrawer({ type: 'feedback', data: feedback })
+      } else {
+        const report = await generateMyReport(activeClassId)
+        setLearningDrawer({ type: 'report', data: report })
+      }
+      await loadLearningAssistantStatus(activeClassId)
+    } catch (err) {
+      setLearningAssistantError(err.message || (language === 'zh' ? '生成失败，请稍后再试' : 'Generation failed. Please try again.'))
+    } finally {
+      setGeneratingLearning(false)
+    }
+  }
+
+  const handleAssistantStudentAction = async (student) => {
+    if (student.latest_report) {
+      setLearningDrawer({ type: 'report', data: student.latest_report })
+      return
+    }
+    if (!student.ready) {
+      setLearningAssistantError(language === 'zh' ? `${student.name} 的学习轨迹仍在积累，暂时不做学情判断。` : `${student.name}'s learning trail is still developing.`)
+      return
+    }
+    if (generatingLearning) return
+    setGeneratingLearning(true)
+    setLearningAssistantError('')
+    try {
+      const report = await generateStudentReport(activeClassId, student.id)
+      setLearningDrawer({ type: 'report', data: report })
+      await loadLearningAssistantStatus(activeClassId)
+    } catch (err) {
+      setLearningAssistantError(err.message)
+    } finally {
+      setGeneratingLearning(false)
+    }
+  }
+
   const handleAddStudent = async () => {
     if (!activeClassId || !studentEmailInput.trim() || studentBusy) return
     setStudentBusy(true)
@@ -880,6 +1036,7 @@ function App() {
       await addClassStudent(activeClassId, { email: studentEmailInput.trim().toLowerCase() })
       setStudentEmailInput('')
       await loadStudents(activeClassId)
+      await loadLearningAssistantStatus(activeClassId)
     } catch (err) {
       alert(err.message)
     } finally {
@@ -893,6 +1050,7 @@ function App() {
     try {
       await removeClassStudent(activeClassId, studentId)
       setStudents(prev => prev.filter(s => s.id !== studentId))
+      await loadLearningAssistantStatus(activeClassId)
     } catch (err) {
       alert(err.message)
     } finally {
@@ -1074,76 +1232,6 @@ function App() {
     }
   }, [])
 
-  // 滚动位置追踪 + 多屏吸附（防止卡在屏间空白）
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    let snapTimer
-    const sectionIds = ['section-chat', 'section-resources', 'section-homework']
-
-    const getSectionTops = () => {
-      const tops = []
-      sectionIds.forEach((id) => {
-        const el = document.getElementById(id) || (id === 'section-chat' ? container.querySelector('.section-chat') : null)
-        if (!el) return
-        // offset relative to scroll container
-        let top = 0
-        let node = el
-        while (node && node !== container) {
-          top += node.offsetTop
-          node = node.offsetParent
-        }
-        // fallback using getBoundingClientRect
-        if (top === 0 && el !== container) {
-          const cRect = container.getBoundingClientRect()
-          const eRect = el.getBoundingClientRect()
-          top = eRect.top - cRect.top + container.scrollTop
-        }
-        tops.push(top)
-      })
-      return tops
-    }
-
-    const handleScroll = () => {
-      const vh = window.innerHeight
-      setScrollPos(container.scrollTop / vh)
-      const marker = container.scrollTop + vh * 0.35
-      const tops = getSectionTops()
-      let nextSection = 'chat'
-      if (tops[2] !== undefined && marker >= tops[2]) nextSection = 'homework'
-      else if (tops[1] !== undefined && marker >= tops[1]) nextSection = 'resources'
-      setActiveSection(nextSection)
-      return
-
-      clearTimeout(snapTimer)
-      snapTimer = setTimeout(() => {
-        const tops = getSectionTops()
-        if (tops.length === 0) return
-        const current = container.scrollTop
-        let nearest = tops[0]
-        let minDist = Math.abs(current - tops[0])
-        tops.forEach((t) => {
-          const d = Math.abs(current - t)
-          if (d < minDist) {
-            minDist = d
-            nearest = t
-          }
-        })
-        // 靠近某屏顶部时吸附，避免停在两屏中间的空白带
-        if (minDist > 24 && minDist < vh * 0.42) {
-          container.scrollTo({ top: nearest, behavior: 'smooth' })
-        }
-      }, 140)
-    }
-
-    container.addEventListener('scroll', handleScroll, { passive: true })
-    handleScroll()
-    return () => {
-      container.removeEventListener('scroll', handleScroll)
-      clearTimeout(snapTimer)
-    }
-  }, [])
 
   const sceneOpacities = useMemo(() => {
     return SCENE_OPTIONS.reduce((acc, scene) => {
@@ -1164,25 +1252,8 @@ function App() {
     return key
   }, [sceneOpacities])
 
-  const chatOpacity = useMemo(() => {
-    const normalizedRot = ((-dialRotation % 360) + 360) % 360
-    const distToSnap = Math.abs((normalizedRot % 120))
-    const finalDist = Math.min(distToSnap, 120 - distToSnap)
-    // Increased fade range: starts fading much earlier
-    const dialOpacity = Math.max(0, 1 - finalDist / 45)
-    const scrollFade = Math.max(0, 1 - pageBlend * 2)
-    return dialOpacity * scrollFade
-  }, [dialRotation, pageBlend])
-
-  const quoteOpacity = useMemo(() => {
-    const normalizedRot = ((-dialRotation % 360) + 360) % 360
-    const distToSnap = Math.abs((normalizedRot % 120))
-    const finalDist = Math.min(distToSnap, 120 - distToSnap)
-    // Quote is even more sensitive, stays hidden longer
-    const dialOpacity = Math.max(0, 1 - finalDist / 25)
-    const scrollFade = Math.max(0, 1 - pageBlend * 2)
-    return dialOpacity * scrollFade
-  }, [dialRotation, pageBlend])
+  const chatOpacity = 1
+  const quoteOpacity = 1
 
   const activeQuote = useMemo(() => SCENE_QUOTES[activeSceneKey][language], [activeSceneKey, language])
 
@@ -1248,6 +1319,19 @@ function App() {
     } catch (err) {
       alert(err.message || (language === 'zh' ? '复制失败' : 'Copy failed'))
     }
+  }
+
+  const handleExampleSelect = (prompt) => {
+    setInput(prompt)
+    requestAnimationFrame(() => {
+      composerInputRef.current?.focus()
+      composerInputRef.current?.setSelectionRange(prompt.length, prompt.length)
+    })
+  }
+
+  const handleRefreshExamples = () => {
+    if (exampleGroups.length < 2) return
+    setExampleGroupIndex(current => (current + 1) % exampleGroups.length)
   }
 
   const handleSend = async (e) => {
@@ -1336,8 +1420,8 @@ function App() {
   }
 
   return (
-    <div className="app-container" ref={containerRef}>
-      {user && (
+    <div className="app-container">
+      {user && activeSection === 'chat' && (
         <>
           {sidebarOpen && (
             <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
@@ -1417,22 +1501,22 @@ function App() {
           </div>
         ))}
 
-        <header className={`topbar ${pageBlend > 0.5 ? 'topbar-scrolled' : ''}`}>
+        <header className="topbar">
           <div className="topbar-left">
             <div className="brand">
               <img src={logoImg} alt="Logo" className="logo-img" />
               <span className="brand-text">{t.brand}</span>
             </div>
             <nav className="topbar-nav" aria-label="Primary">
-              <button type="button" className={`nav-link ${activeSection === 'chat' ? 'active' : ''}`} onClick={() => scrollToSection('chat')}>
+              <button type="button" className={`nav-link ${activeSection === 'chat' ? 'active' : ''}`} onClick={() => handleSectionChange('chat')} aria-current={activeSection === 'chat' ? 'page' : undefined}>
                 {t.navChat}
               </button>
               {user && (
                 <>
-                  <button type="button" className={`nav-link ${activeSection === 'resources' ? 'active' : ''}`} onClick={() => scrollToSection(isTeacher ? 'section-classes' : 'section-resources')}>
+                  <button type="button" className={`nav-link ${activeSection === 'resources' ? 'active' : ''}`} onClick={() => handleSectionChange('resources')} aria-current={activeSection === 'resources' ? 'page' : undefined}>
                     {isTeacher ? t.navClasses : t.navResources}
                   </button>
-                  <button type="button" className={`nav-link ${activeSection === 'homework' ? 'active' : ''}`} onClick={() => scrollToSection('section-homework')}>
+                  <button type="button" className={`nav-link ${activeSection === 'homework' ? 'active' : ''}`} onClick={() => handleSectionChange('homework')} aria-current={activeSection === 'homework' ? 'page' : undefined}>
                     {t.navHomework}
                   </button>
                   <button type="button" className="nav-link nav-link-more" disabled title={language === 'zh' ? '即将推出' : 'Coming soon'}>
@@ -1473,11 +1557,8 @@ function App() {
           </div>
         </header>
 
-        <section id="section-chat" className="section section-chat">
-          <div className="chat-shell" style={{
-            opacity: chatOpacity, 
-            transform: `scale(${0.98 + chatOpacity * 0.02}) translateY(${pageBlend * -50}px)` 
-          }}>
+        <section id="section-chat" className="section section-chat" hidden={activeSection !== 'chat'}>
+          <div className={`chat-shell ${messages.length > 0 ? 'active-chat' : 'empty-chat'}`}>
             <div className="chat-title">
               <img src={logoImg} alt="Logo" className="logo-img logo-img-lg" />
               <h1>{t.title}</h1>
@@ -1498,6 +1579,29 @@ function App() {
                     <p>{welcomeText}</p>
                   )}
                 </div>
+              )}
+              {messages.length === 0 && canChat && visibleExamplePrompts.length > 0 && (
+                <section className="example-prompts" aria-label={t.exampleQuestions}>
+                  <div className="example-prompts-header">
+                    <span>{t.exampleQuestions}</span>
+                    <button
+                      type="button"
+                      className="refresh-examples-btn"
+                      onClick={handleRefreshExamples}
+                      aria-label={t.refreshExamples}
+                    >
+                      <span aria-hidden="true">↻</span>
+                      {t.refreshExamples}
+                    </button>
+                  </div>
+                  <div className="example-prompts-grid">
+                    {visibleExamplePrompts.map(prompt => (
+                      <button key={prompt} type="button" className="example-prompt-card" onClick={() => handleExampleSelect(prompt)}>
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </section>
               )}
               {messages.map((msg, idx) => (
                 <div key={idx} className={`message-item ${msg.role}`}>
@@ -1576,6 +1680,7 @@ function App() {
                 onChange={handlePickImage}
               />
               <textarea
+                ref={composerInputRef}
                 value={input} 
                 onChange={(e) => setInput(e.target.value)} 
                 onKeyDown={handleKeyDown}
@@ -1601,7 +1706,7 @@ function App() {
             </form>
           </div>
 
-      <div className="scene-dial-wrap" style={{ opacity: chatOpacity, transform: `translateY(${pageBlend * 100}px)` }}>
+          <div className="scene-dial-wrap" style={{ opacity: chatOpacity }}>
             <div className="dial-pointer" aria-hidden="true" />
             <div className="scene-dial" onMouseDown={handleMouseDown} style={{ 
                 transform: `rotate(${dialRotation}deg)`,
@@ -1626,7 +1731,6 @@ function App() {
 
           <footer className="scene-quote-footer" style={{ 
             opacity: messages.length > 0 ? 0 : quoteOpacity, 
-            transform: `translateY(${pageBlend * 50}px)`,
             visibility: messages.length > 0 ? 'hidden' : 'visible',
             pointerEvents: 'none'
           }}>
@@ -1636,15 +1740,9 @@ function App() {
             </blockquote>
           </footer>
 
-          <div className="scroll-indicator" style={{ opacity: chatOpacity }}>
-            <span>{scrollHint}</span>
-            <div className="arrow-down" />
-          </div>
         </section>
 
-        <section id="section-resources" className={`section section-resources ${isTeacher ? 'section-teacher' : 'section-student'}`} style={{ 
-          opacity: Math.min(1, Math.max(0, (pageBlend - 0.15) * 1.8)),
-        }}>
+        <section id="section-resources" className={`section section-resources ${isTeacher ? 'section-teacher' : 'section-student'}`} hidden={activeSection !== 'resources'}>
           <div className="resources-container">
             <div className="resources-header" id={isTeacher ? 'section-classes' : undefined}>
               <h2>{secondPageTitle}</h2>
@@ -1755,7 +1853,7 @@ function App() {
                               <div key={s.id} className="student-row">
                                 <div>
                                   <strong>{s.name}</strong>
-                                  <span className="muted-inline">{t.auth.messagesCount}: {s.message_count}</span>
+                                  <span className="muted-inline">{t.auth.messagesCount}: {s.effective_question_count ?? s.message_count}</span>
                                 </div>
                                 <div className="card-actions">
                                   <button type="button" className="download-btn" onClick={() => handleViewStudentReport(s.id)}>
@@ -1891,7 +1989,7 @@ function App() {
         </section>
 
         {user && (isTeacher || isStudent) && (
-          <section id="section-homework" className="section section-homework">
+          <section id="section-homework" className="section section-homework" hidden={activeSection !== 'homework'}>
             <div className="resources-container">
               <div className="resources-header">
                 <h2>{t.homeworkPageTitle}</h2>
@@ -2053,6 +2151,34 @@ function App() {
         )}
       </main>
 
+      {user && activeSection === 'chat' && (
+        <LearningMascot
+          role={user.role}
+          activeClass={activeClass}
+          open={learningAssistantOpen}
+          loading={learningAssistantLoading}
+          status={learningAssistantStatus}
+          generating={generatingLearning}
+          error={learningAssistantError}
+          language={language}
+          onToggle={handleLearningAssistantToggle}
+          onClose={() => setLearningAssistantOpen(false)}
+          onGenerate={handleAssistantGenerate}
+          onViewLatest={(data) => setLearningDrawer({ type: isTeacher ? 'feedback' : 'report', data })}
+          onFocusChat={() => {
+            setLearningAssistantOpen(false)
+            requestAnimationFrame(() => composerInputRef.current?.focus())
+          }}
+          onGoToClasses={() => {
+            setLearningAssistantOpen(false)
+            handleSectionChange('resources')
+          }}
+          onStudentAction={handleAssistantStudentAction}
+        />
+      )}
+
+      <LearningReportDrawer value={learningDrawer} language={language} onClose={() => setLearningDrawer(null)} />
+
       {/* Report / Feedback Modals */}
       {reportModal && (
         <div className="auth-overlay" onClick={() => setReportModal(null)}>
@@ -2147,8 +2273,10 @@ function App() {
                 </div>
               )}
               {authError && <p className="auth-error">{authError}</p>}
-              <button type="submit" className="auth-submit" disabled={authLoading}>
-                {authModal === 'login' ? t.auth.loginBtn : t.auth.signupBtn}
+              <button type="submit" className="auth-submit" disabled={authLoading} aria-busy={authLoading}>
+                {authLoading
+                  ? authModal === 'login' ? t.auth.loggingIn : t.auth.signingUp
+                  : authModal === 'login' ? t.auth.loginBtn : t.auth.signupBtn}
               </button>
             </form>
 
