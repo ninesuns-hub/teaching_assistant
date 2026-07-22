@@ -17,7 +17,8 @@ export default function Topbar({
 
   return (
     <header className="topbar">
-      <div className="topbar-left">
+      <div className="topbar-inner">
+        <div className="topbar-left">
         <div className="brand">
           <img src={logoImg} alt="Logo" className="logo-img" />
           <span className="brand-text">{t.brand}</span>
@@ -40,8 +41,8 @@ export default function Topbar({
             </>
           )}
         </nav>
-      </div>
-      <div className="topbar-actions">
+        </div>
+        <div className="topbar-actions">
         <div className="settings-wrap">
           <button type="button" className="ghost-btn" onClick={() => setSettingsOpen(!settingsOpen)}>
             {t.settings}
@@ -69,6 +70,7 @@ export default function Topbar({
             <button type="button" className="solid-btn" onClick={() => onOpenAuth('signup')}>{t.signup}</button>
           </>
         )}
+        </div>
       </div>
     </header>
   )

@@ -512,7 +512,7 @@
 }
 
 .status-pending {
-  color: #ffd18a;
+  color: var(--color-status-pending);
 }
 
 .download-btn.danger {

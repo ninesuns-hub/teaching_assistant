@@ -1,7 +1,11 @@
 @media (max-width: 900px) {
   .topbar {
     height: 112px;
-    padding: 8px 14px 52px;
+    padding: 8px var(--page-gutter) 52px;
+  }
+
+  .topbar-inner {
+    gap: var(--space-3);
   }
 
   .topbar-left {
@@ -33,7 +37,7 @@
   }
 
   .section-chat {
-    padding: 124px 14px 14px;
+    padding: 124px var(--page-gutter) 14px;
   }
 
   .section-resources,
@@ -66,10 +70,6 @@
     padding-top: 12px;
   }
 
-  .chat-title h1 {
-    font-size: 26px;
-  }
-
   .example-prompts-grid {
     grid-template-columns: 1fr;
   }
@@ -85,6 +85,25 @@
   .composer {
     padding: 10px 12px;
     gap: 8px;
+  }
+
+  .composer--hero {
+    min-height: 64px;
+    padding-left: 16px;
+  }
+
+  .composer--hero textarea {
+    min-height: 40px;
+    font-size: 16px;
+  }
+
+  .composer--hero .attach-image-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .welcome-flow {
+    gap: 12px;
   }
 
   .composer button[type="submit"] {

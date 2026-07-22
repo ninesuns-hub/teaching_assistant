@@ -10,6 +10,11 @@
   --space-8: 32px;
   --space-12: 48px;
 
+  --content-max-width: 960px;
+  --welcome-max-width: 900px;
+  --page-gutter: clamp(16px, 3vw, 40px);
+  --topbar-gutter: clamp(32px, 3vw, 64px);
+
   --radius-control: 10px;
   --radius-card: 16px;
   --radius-panel: 20px;
@@ -34,6 +39,7 @@
   --color-accent: #91a9ff;
   --color-accent-contrast: #0b1020;
   --color-focus: rgba(145, 169, 255, 0.72);
+  --color-status-pending: #cba35f;
   --shadow-panel: 0 18px 48px rgba(1, 5, 16, 0.18);
   --shadow-floating: 0 24px 72px rgba(1, 5, 16, 0.32);
   --backdrop-blur: 22px;
@@ -54,6 +60,7 @@
   --color-accent: #2e6f9e;
   --color-accent-contrast: #f7fbfe;
   --color-focus: rgba(46, 111, 158, 0.58);
+  --color-status-pending: #88501f;
   --shadow-panel: 0 18px 48px rgba(49, 88, 116, 0.11);
   --shadow-floating: 0 24px 72px rgba(49, 88, 116, 0.18);
 }
@@ -63,15 +70,16 @@
   --color-canvas-elevated: #f3e8e2;
   --color-text-primary: #30282a;
   --color-text-secondary: rgba(48, 40, 42, 0.72);
-  --color-text-tertiary: rgba(48, 40, 42, 0.5);
-  --color-surface-1: rgba(246, 237, 232, 0.66);
-  --color-surface-2: rgba(250, 244, 240, 0.84);
-  --color-surface-hover: rgba(255, 249, 245, 0.94);
+  --color-text-tertiary: rgba(48, 40, 42, 0.56);
+  --color-surface-1: rgba(246, 237, 232, 0.74);
+  --color-surface-2: rgba(250, 244, 240, 0.9);
+  --color-surface-hover: rgba(255, 249, 245, 0.96);
   --color-border-subtle: rgba(83, 60, 61, 0.12);
   --color-border-strong: rgba(83, 60, 61, 0.22);
   --color-accent: #a86152;
   --color-accent-contrast: #fff8f4;
   --color-focus: rgba(168, 97, 82, 0.56);
+  --color-status-pending: #8d493d;
   --shadow-panel: 0 18px 48px rgba(91, 57, 54, 0.12);
   --shadow-floating: 0 24px 72px rgba(91, 57, 54, 0.2);
 }
@@ -90,6 +98,7 @@
   --color-accent: #91a9ff;
   --color-accent-contrast: #0b1020;
   --color-focus: rgba(145, 169, 255, 0.72);
+  --color-status-pending: #cba35f;
   --shadow-panel: 0 18px 48px rgba(1, 5, 16, 0.18);
   --shadow-floating: 0 24px 72px rgba(1, 5, 16, 0.32);
 }
