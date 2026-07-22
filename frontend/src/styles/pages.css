@@ -1,0 +1,639 @@
+/* Resources Section */
+.section-resources {
+  padding: 140px 40px 120px;
+  min-height: 100vh;
+}
+
+.section-resources.section-teacher {
+  padding-top: 160px;
+}
+
+.section-homework {
+  padding: 140px 40px 140px;
+  min-height: 100vh;
+}
+
+.section-homework .homework-panel {
+  margin-top: 8px;
+}
+
+.resources-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.resources-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.section-teacher .resources-header {
+  margin-bottom: 20px;
+}
+
+.resources-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.resource-library-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin: 42px 0 24px;
+}
+
+.resource-library-header h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px;
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(10px);
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-primary);
+  padding: 8px 20px;
+  border-radius: var(--radius-panel);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s, transform 0.3s;
+  opacity: 0.6;
+}
+
+.filter-btn.active {
+  background: var(--color-text-primary);
+  color: var(--color-canvas);
+  opacity: 1;
+  font-weight: 600;
+}
+
+.resources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.resource-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-control);
+  padding: 24px;
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+  backdrop-filter: blur(15px);
+  display: flex;
+  flex-direction: column;
+  min-height: 210px;
+}
+
+.resource-card:hover {
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.card-type {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.5;
+  margin-bottom: 18px;
+}
+
+.resource-card h3 {
+  font-size: 20px;
+  margin: 0 0 14px;
+  line-height: 1.35;
+}
+
+.resource-card p {
+  font-size: 15px;
+  line-height: 1.5;
+  opacity: 0.7;
+  margin-bottom: 24px;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.card-footer span {
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.download-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+  padding: 6px 16px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s, transform 0.3s;
+}
+
+.download-btn:hover {
+  background: var(--color-text-primary);
+  color: var(--color-canvas);
+}
+
+
+.learning-panel {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.learning-panel h3,
+.learning-panel h4 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.learning-actions {
+  margin-bottom: 16px;
+}
+
+.students-fold-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.students-fold-toggle:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.students-fold-toggle.open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+.students-fold-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.students-fold-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.students-fold-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+.students-fold-meta svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.25s ease;
+}
+
+.students-fold-toggle.open .students-fold-meta svg {
+  transform: rotate(180deg);
+}
+
+.students-fold-body {
+  margin-top: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.student-manage-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.student-manage-row input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+}
+
+.student-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.muted-inline {
+  display: block;
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 4px;
+}
+
+.report-modal {
+  width: min(720px, 92vw);
+  max-height: 85vh;
+  overflow: auto;
+  background: rgba(20, 20, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-panel);
+  padding: 24px;
+  position: relative;
+}
+
+.report-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.85;
+  margin: 0;
+  opacity: 0.92;
+  letter-spacing: 0.02em;
+}
+
+
+.class-panel {
+  margin: 0 0 28px;
+  padding: 20px;
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.06);
+  width: 100%;
+}
+
+.teacher-panel {
+  margin-top: 8px;
+}
+
+.class-actions {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+  align-items: center;
+}
+
+.class-actions input {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.class-actions input:focus {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.action-btn {
+  border: none;
+  cursor: pointer;
+  padding: 11px 18px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-btn-primary {
+  background: var(--color-text-primary);
+  color: var(--color-canvas);
+}
+
+.action-btn-soft {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.action-btn-soft:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.upload-btn.soft {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+}
+
+.homework-panel {
+  margin-top: 36px;
+  padding: 22px;
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.homework-header h3 {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+
+.homework-publish {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.homework-publish input,
+.homework-publish textarea,
+.homework-submit textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  outline: none;
+  resize: vertical;
+  font: inherit;
+}
+
+.homework-publish-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.homework-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.homework-card {
+  padding: 16px;
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.homework-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.homework-card h4 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.homework-desc {
+  margin: 0 0 8px;
+  opacity: 0.75;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.homework-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.homework-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.homework-submit {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.submission-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.submission-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.status-done {
+  color: #9ad7b3;
+}
+
+.status-pending {
+  color: #ffd18a;
+}
+
+.download-btn.danger {
+  opacity: 0.75;
+}
+
+.download-btn.danger:hover {
+  opacity: 1;
+  background: rgba(255, 120, 100, 0.18);
+}
+
+@media (max-width: 720px) {
+  .homework-card-top {
+    flex-direction: column;
+  }
+  .homework-publish-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.class-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.upload-btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.invite-code-display {
+  margin: 8px 0;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.invite-code-display strong {
+  letter-spacing: 2px;
+  font-size: 16px;
+}
+
+.join-more {
+  margin-top: 12px;
+}
+
+.section-teacher .resources-header h2,
+.section-student .resources-header h2 {
+  margin-bottom: 8px;
+}
+
+.form-group small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+/* Semantic page surfaces */
+.filter-bar,
+.resource-card,
+.class-panel,
+.learning-panel,
+.students-fold-toggle,
+.students-fold-body,
+.student-row,
+.homework-panel,
+.homework-card,
+.submission-row {
+  background: var(--color-surface-1);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-primary);
+}
+
+.resource-card:hover,
+.students-fold-toggle:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+}
+
+.filter-btn,
+.download-btn,
+.action-btn-soft,
+.upload-btn {
+  color: var(--color-text-primary);
+}
+
+.filter-btn.active,
+.action-btn-primary,
+.download-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.class-actions input,
+.student-manage-row input,
+.homework-publish input,
+.homework-publish textarea,
+.homework-submit textarea {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-primary);
+}
+
+
+.section-resources,
+.section-homework {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 110px 40px 64px;
+}
+
+.section-resources.section-teacher {
+  padding-top: 110px;
+}

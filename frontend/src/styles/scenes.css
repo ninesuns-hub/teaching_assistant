@@ -1,0 +1,229 @@
+/* Background Layers */
+.scene-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background-color: var(--bg-main);
+  background-image: var(--sky-core);
+  pointer-events: none;
+  transition: opacity 0.1s linear;
+}
+
+.scene-layer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--sky-overlay), var(--sky-detail);
+  opacity: 0.92;
+}
+
+/* Scene Definitions */
+.scene-day {
+  --bg-main: #6cbfff;
+  --text-main: #15304d;
+  /* 5 段渐变模拟大气层次：高空深蓝 → 地平线暖白，过渡更细腻通透 */
+  --sky-core: linear-gradient(180deg, #2f92f5 0%, #59aef2 30%, #90cdf0 60%, #d3ecfb 85%, #f2fbff 100%);
+  --sky-overlay:
+    radial-gradient(ellipse at 80% 16%, rgba(255, 253, 240, 0.55) 0%, rgba(255, 255, 255, 0.18) 14%, transparent 34%),
+    radial-gradient(ellipse at 22% 30%, rgba(255, 255, 255, 0.28) 0%, transparent 22%),
+    radial-gradient(ellipse at 50% 18%, rgba(255, 255, 255, 0.22) 0%, transparent 26%),
+    conic-gradient(from 170deg at 50% -10%, transparent 35%, rgba(255,255,255,0.22) 50%, transparent 65%);
+  --sky-detail: none;
+  /* 光晕移至右上方，模拟柔和的太阳光 */
+  --halo-primary: radial-gradient(circle at 80% 18%, rgba(255, 250, 232, 0.85) 0%, rgba(255, 255, 255, 0.25) 38%, transparent 70%);
+}
+
+.scene-sunset {
+  --bg-main: #8ea3b7;
+  --text-main: #2d2629;
+
+  --sky-core: linear-gradient(
+    180deg,
+    #8ea3b7 0%,
+    #a8acb3 15%,
+    #c1b4b1 30%,
+    #d8aa93 45%,
+    #e39d7e 60%,
+    #e3a396 75%,
+    #e1a29d 90%,
+    #d99794 100%
+  );
+
+  --sky-overlay:
+    radial-gradient(ellipse at 50% 55%, rgba(227, 157, 126, 0.25) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 10%, rgba(142, 163, 183, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 90%, rgba(255, 255, 255, 0.2) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
+
+  --sky-detail: none;
+
+  --halo-primary: radial-gradient(circle at 50% 50%, rgba(216, 170, 147, 0.25), transparent 75%);
+}
+
+.scene-night {
+  --bg-main: #03050a;
+  --text-main: #f1f4fb;
+  /* 多层星云：右上冷蓝、左下深紫，叠加深空径向渐变，营造通透的宇宙纵深 */
+  --sky-core:
+    radial-gradient(ellipse 80% 60% at 72% 12%, rgba(58, 74, 140, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 55% at 22% 82%, rgba(96, 58, 128, 0.22) 0%, transparent 55%),
+    radial-gradient(circle at 50% 0%, #0d1630 0%, #060a18 45%, #03050a 85%);
+  --sky-overlay:
+    radial-gradient(circle at 10% 10%, #fff 0 0.9px, transparent 1.4px),
+    radial-gradient(circle at 45% 8%, #fff 0 0.7px, transparent 1.2px),
+    radial-gradient(circle at 85% 12%, #eaf1ff 0 1px, transparent 1.5px),
+    radial-gradient(circle at 68% 30%, #fff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 30% 22%, #fff 0 0.6px, transparent 1.1px),
+    radial-gradient(circle at 92% 45%, #fff 0 0.7px, transparent 1.2px);
+  --sky-detail:
+    radial-gradient(circle at 5% 60%, rgba(255,255,255,0.8) 0 0.6px, transparent 1px),
+    radial-gradient(circle at 95% 90%, rgba(255,255,255,0.9) 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 20% 85%, rgba(210,225,255,0.75) 0 0.6px, transparent 1px),
+    radial-gradient(circle at 55% 76%, rgba(255,255,255,0.7) 0 0.5px, transparent 0.9px),
+    radial-gradient(circle at 78% 68%, rgba(255,245,230,0.7) 0 0.6px, transparent 1px);
+  /* 更柔和的月光氛围光 */
+  --halo-primary: radial-gradient(circle at 50% 46%, rgba(120, 150, 255, 0.28) 0%, rgba(88, 108, 196, 0.12) 40%, transparent 72%);
+}
+
+/* Dynamic Elements */
+.scene-halo {
+  position: absolute;
+  inset: -20%;
+  z-index: -1;
+  background: var(--halo-primary);
+  opacity: 0.7;
+  filter: blur(30px);
+  animation: halo-breathe 10s ease-in-out infinite;
+}
+
+.scene-motion {
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+}
+
+.scene-day .scene-motion {
+  background:
+    radial-gradient(ellipse 42% 55% at 26% 34%, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.4) 42%, transparent 72%),
+    radial-gradient(ellipse 30% 42% at 33% 40%, rgba(255,255,255,0.7) 0%, transparent 62%),
+    radial-gradient(ellipse 48% 44% at 72% 24%, rgba(255,255,255,0.88) 0%, rgba(255,255,255,0.32) 46%, transparent 74%),
+    radial-gradient(ellipse 34% 40% at 66% 20%, rgba(255,255,255,0.62) 0%, transparent 60%);
+  filter: blur(32px);
+  opacity: 0.95;
+  animation: cloud-drift 55s ease-in-out infinite alternate;
+}
+
+/* 远景云层：更淡、更慢、反向漂移，与近景形成视差纵深 */
+.scene-day .scene-motion-secondary {
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 38% 34% at 16% 62%, rgba(255,255,255,0.5) 0%, transparent 66%),
+    radial-gradient(ellipse 46% 36% at 84% 56%, rgba(255,255,255,0.42) 0%, transparent 68%),
+    radial-gradient(ellipse 30% 28% at 54% 72%, rgba(255,255,255,0.36) 0%, transparent 64%);
+  filter: blur(46px);
+  opacity: 0.75;
+  animation: cloud-drift-far 82s ease-in-out infinite alternate;
+}
+
+.scene-sunset .scene-motion {
+  background:
+    /* 上部灰蓝云雾 */
+    radial-gradient(ellipse at 35% 20%, rgba(142, 163, 183, 0.16) 0, transparent 55%),
+    /* 中部杏粉暖霞 */
+    radial-gradient(ellipse at 65% 50%, rgba(225, 170, 140, 0.20) 0, transparent 50%),
+    /* 下部极淡的轻柔珊瑚红余晖 */
+    radial-gradient(ellipse at 40% 80%, rgba(214, 131, 131, 0.12) 0, transparent 45%);
+
+  filter: blur(95px); /* 略微微调模糊度，保证色彩融化般自然无界 */
+  animation: sunset-flow 28s ease-in-out infinite alternate;
+}
+
+.scene-night .scene-motion {
+  background:
+    radial-gradient(circle at 15% 15%, #fff 0 1.2px, transparent 2px),
+    radial-gradient(circle at 45% 65%, #fff 0 0.9px, transparent 1.6px),
+    radial-gradient(circle at 85% 75%, #fff 0 1.2px, transparent 2.1px),
+    radial-gradient(circle at 62% 42%, #eaf1ff 0 1px, transparent 1.8px),
+    radial-gradient(circle at 33% 50%, #fff 0 0.8px, transparent 1.5px);
+  animation: star-twinkle-a 3s infinite alternate, center-drift-a 60s linear infinite;
+}
+
+/* 星云带 + 二级星点：不同闪烁节奏与反向慢速旋转，营造真实深邃的夜空 */
+.scene-night .scene-motion-secondary {
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 62% 26% at 38% 42%, rgba(96, 126, 214, 0.16) 0%, transparent 62%),
+    radial-gradient(ellipse 46% 20% at 64% 56%, rgba(150, 100, 200, 0.13) 0%, transparent 62%),
+    radial-gradient(circle at 25% 30%, #fff 0 0.7px, transparent 1.2px),
+    radial-gradient(circle at 60% 20%, #fff 0 0.6px, transparent 1.1px),
+    radial-gradient(circle at 80% 40%, #fff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 40% 55%, #fff 0 0.6px, transparent 1px),
+    radial-gradient(circle at 72% 72%, #fff 0 0.6px, transparent 1px);
+  animation: star-twinkle-b 4.6s ease-in-out infinite alternate, center-drift-a 90s linear infinite reverse;
+}
+
+.scene-meteor {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+
+.scene-meteor::before {
+  content: '';
+  position: absolute;
+  width: 200px;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.85) 78%, #fff);
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.7));
+  transform: rotate(35deg);
+  top: -10%;
+  left: 15%;
+  animation: meteor-run 5s linear infinite;
+}
+
+/* Keyframes */
+@keyframes halo-breathe {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.6; }
+  50% { transform: scale(1.15) rotate(5deg); opacity: 0.8; }
+}
+
+@keyframes cloud-drift {
+  from { transform: translate(-6%, -1.5%) scale(1); }
+  to   { transform: translate(7%, 1.5%) scale(1.06); }
+}
+
+@keyframes cloud-drift-far {
+  from { transform: translate(6%, 1%) scale(1.04); }
+  to   { transform: translate(-6%, -1%) scale(1); }
+}
+
+@keyframes sunset-flow {
+  from { transform: scale(1) translate(-2%, -2%); filter: blur(40px); }
+  to { transform: scale(1.1) translate(2%, 2%); filter: blur(60px); }
+}
+
+@keyframes center-drift-a {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes star-twinkle-a {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes star-twinkle-b {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes meteor-run {
+  0% { transform: translate(-200px, -200px) rotate(35deg); opacity: 0; }
+  5% { opacity: 1; }
+  15% { transform: translate(100vw, 100vh) rotate(35deg); opacity: 0; }
+  100% { transform: translate(100vw, 100vh) rotate(35deg); opacity: 0; }
+}

@@ -1,0 +1,93 @@
+@media (max-width: 900px) {
+  .topbar {
+    height: 112px;
+    padding: 8px 14px 52px;
+  }
+
+  .topbar-left {
+    gap: 12px;
+  }
+
+  .topbar-nav {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 6px;
+    display: flex;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .topbar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-link {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+  }
+
+  .user-badge {
+    display: none;
+  }
+
+  .section-chat {
+    padding: 124px 14px 14px;
+  }
+
+  .section-resources,
+  .section-homework,
+  .section-resources.section-teacher {
+    padding: 140px 16px 40px;
+  }
+
+  .scene-dial-wrap {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .brand-text {
+    display: none;
+  }
+
+  .topbar-actions {
+    gap: 2px;
+  }
+
+  .topbar-actions .ghost-btn,
+  .topbar-actions .solid-btn {
+    padding: 7px 10px;
+  }
+
+  .chat-shell.empty-chat {
+    justify-content: flex-start;
+    padding-top: 12px;
+  }
+
+  .chat-title h1 {
+    font-size: 26px;
+  }
+
+  .example-prompts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .example-prompt-card {
+    min-height: 0;
+  }
+
+  .active-chat .messages-list.has-messages {
+    padding: 16px 12px;
+  }
+
+  .composer {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .composer button[type="submit"] {
+    padding: 0 14px;
+  }
+}
