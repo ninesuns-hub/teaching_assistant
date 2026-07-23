@@ -4,7 +4,7 @@ import { AuthImage, MessageActionIcon } from '../components/chat/MessageParts'
 import SceneSwitcher from '../components/scenes/SceneSwitcher'
 
 export default function ChatPage({ model }) {
-  const { SCENE_OPTIONS, activeQuote, activeSceneKey, canChat, chatOpacity, chatPlaceholder, composerInputRef, dialRotation, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMouseDown, handlePickImage, handleRefreshExamples, handleSend, imageInputRef, input, isDragging, isSending, language, messages, messagesEndRef, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
+  const { SCENE_OPTIONS, activeQuote, activeSceneKey, canChat, chatOpacity, chatPlaceholder, composerInputRef, dialRotation, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMouseDown, handlePickImage, handleRefreshExamples, handleSceneSelect, handleSend, imageInputRef, input, isDragging, isSending, language, messages, messagesEndRef, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
   const isWelcome = messages.length === 0
   const composerProps = {
     canChat,
@@ -91,10 +91,10 @@ export default function ChatPage({ model }) {
                         <button type="button" className="feedback-btn" title={t.auth.feedbackCopy} aria-label={t.auth.feedbackCopy} onClick={() => handleCopyMessage(message.content)}>
                           <MessageActionIcon type="copy" />
                         </button>
-                        <button type="button" className={`feedback-btn ${message.feedback === 'positive' ? 'active' : ''}`} title={t.auth.feedbackHelpful} aria-label={t.auth.feedbackHelpful} onClick={() => handleFeedback(index, 'positive')}>
+                        <button type="button" className={`feedback-btn ${message.feedback === 'positive' ? 'active' : ''}`} title={t.auth.feedbackHelpful} aria-label={t.auth.feedbackHelpful} aria-pressed={message.feedback === 'positive'} onClick={() => handleFeedback(index, 'positive')}>
                           <MessageActionIcon type="up" />
                         </button>
-                        <button type="button" className={`feedback-btn ${message.feedback === 'negative' ? 'active' : ''}`} title={t.auth.feedbackUnhelpful} aria-label={t.auth.feedbackUnhelpful} onClick={() => handleFeedback(index, 'negative')}>
+                        <button type="button" className={`feedback-btn ${message.feedback === 'negative' ? 'active' : ''}`} title={t.auth.feedbackUnhelpful} aria-label={t.auth.feedbackUnhelpful} aria-pressed={message.feedback === 'negative'} onClick={() => handleFeedback(index, 'negative')}>
                           <MessageActionIcon type="down" />
                         </button>
                       </div>
@@ -109,7 +109,7 @@ export default function ChatPage({ model }) {
         )}
       </div>
 
-      <SceneSwitcher scenes={SCENE_OPTIONS} activeScene={activeSceneKey} rotation={dialRotation} dragging={isDragging} opacity={chatOpacity} onMouseDown={handleMouseDown} />
+      <SceneSwitcher scenes={SCENE_OPTIONS} activeScene={activeSceneKey} rotation={dialRotation} dragging={isDragging} opacity={chatOpacity} language={language} onMouseDown={handleMouseDown} onSceneSelect={handleSceneSelect} />
       <footer className="scene-quote-footer" style={{ opacity: isWelcome ? quoteOpacity : 0, visibility: isWelcome ? 'visible' : 'hidden', pointerEvents: 'none' }}>
         <blockquote className="scene-quote">
           <p>{activeQuote.text}</p>

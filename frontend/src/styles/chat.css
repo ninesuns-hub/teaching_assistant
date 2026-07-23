@@ -169,7 +169,7 @@
   transition: background 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
 }
 
-.feedback-btn:hover {
+.feedback-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
   transform: translateY(-1px);
@@ -193,7 +193,9 @@
 
 .feedback-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 1;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-bg);
 }
 
 .thinking-indicator {
@@ -513,11 +515,31 @@
   border: none;
   border-radius: var(--radius-control);
   padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   cursor: pointer;
   font-weight: 600;
-  transition: opacity 0.3s;
+  transition: background-color var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast);
 }
-.composer button[type="submit"]:disabled { opacity: 0.3; }
+
+.composer button[type="submit"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.08);
+}
+
+.composer button[type="submit"]:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.composer button[type="submit"]:disabled,
+.composer .attach-image-btn:disabled {
+  opacity: 1;
+  background: var(--color-disabled-bg);
+  color: var(--color-disabled-text);
+  border: 1px solid var(--color-disabled-border);
+}
 
 /* Semantic chat surfaces */
 .welcome-card,
@@ -535,7 +557,7 @@
   background: var(--color-surface-2);
 }
 
-.example-prompt-card:hover,
+.example-prompt-card:hover:not(:disabled),
 .composer:focus-within {
   background: var(--color-surface-hover);
   border-color: var(--color-border-strong);
@@ -550,7 +572,8 @@
 }
 
 .composer textarea::placeholder {
-  color: var(--color-text-tertiary);
+  color: var(--color-placeholder);
+  opacity: 1;
 }
 
 .composer .attach-image-btn {
@@ -636,7 +659,7 @@
   gap: 16px;
   margin-bottom: 6px;
   padding: 0 4px;
-  font-size: 13px;
+  font-size: var(--font-size-control);
   font-weight: 600;
   letter-spacing: 0.04em;
   opacity: 0.82;
@@ -657,7 +680,7 @@
   transition: background 0.2s ease, opacity 0.2s ease;
 }
 
-.refresh-examples-btn:hover {
+.refresh-examples-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
   opacity: 1;
 }
@@ -676,7 +699,7 @@
   background: rgba(255, 255, 255, 0.08);
   color: inherit;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-control);
   line-height: 1.55;
   text-align: left;
   overflow-wrap: anywhere;
@@ -685,7 +708,7 @@
   transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
 
-.example-prompt-card:hover {
+.example-prompt-card:hover:not(:disabled) {
   transform: translateY(-2px);
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(255, 255, 255, 0.28);
@@ -694,8 +717,8 @@
 .nav-link:focus-visible,
 .refresh-examples-btn:focus-visible,
 .example-prompt-card:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
 }
 
 .composer {

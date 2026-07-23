@@ -96,6 +96,29 @@ function AppController() {
   const dragRef = useRef({ startX: 0, startRot: 0 })
   const messagesEndRef = useRef(null)
   const composerInputRef = useRef(null)
+  const pendingActionsRef = useRef(new Set())
+  const [pendingActions, setPendingActions] = useState({})
+
+  const isActionPending = useCallback(
+    actionKey => Boolean(pendingActions[actionKey]),
+    [pendingActions],
+  )
+
+  const runPendingAction = useCallback(async (actionKey, operation) => {
+    if (pendingActionsRef.current.has(actionKey)) return undefined
+    pendingActionsRef.current.add(actionKey)
+    setPendingActions(current => ({ ...current, [actionKey]: true }))
+    try {
+      return await operation()
+    } finally {
+      pendingActionsRef.current.delete(actionKey)
+      setPendingActions(current => {
+        const next = { ...current }
+        delete next[actionKey]
+        return next
+      })
+    }
+  }, [])
 
   const t = TRANSLATIONS[language]
   const isTeacher = user?.role === 'teacher'
@@ -359,6 +382,7 @@ function AppController() {
       return
     }
 
+    return runPendingAction('auth:code', async () => {
     setAuthError('')
     saveCooldown(email)
     setCodeCooldown(CODE_COOLDOWN_SEC)
@@ -371,10 +395,12 @@ function AppController() {
     } finally {
       setSendingCode(false)
     }
+    })
   }
 
   const handleSignup = async (e) => {
     e.preventDefault()
+    return runPendingAction('auth:signup', async () => {
     setAuthError('')
     setAuthLoading(true)
     try {
@@ -391,10 +417,12 @@ function AppController() {
     } finally {
       setAuthLoading(false)
     }
+    })
   }
 
   const handleLogin = async (e) => {
     e.preventDefault()
+    return runPendingAction('auth:login', async () => {
     setAuthError('')
     setAuthLoading(true)
     try {
@@ -408,9 +436,12 @@ function AppController() {
     } finally {
       setAuthLoading(false)
     }
+    })
   }
 
   const handleSelectRole = async (role) => {
+    return runPendingAction(`auth:role:${role}`, async () => {
+    setAuthLoading(true)
     try {
       const data = await selectRole(role)
       const nextUser = { ...user, role: data.role, needs_role_selection: false }
@@ -420,7 +451,10 @@ function AppController() {
       setRoleModalOpen(false)
     } catch (err) {
       setAuthError(err.message)
+    } finally {
+      setAuthLoading(false)
     }
+    })
   }
 
   const handleLogout = () => {
@@ -480,56 +514,64 @@ function AppController() {
 
   const handleGenerateStudentReport = async (studentId) => {
     if (!activeClassId || generatingLearning) return
-    setGeneratingLearning(true)
-    try {
-      const report = await generateStudentReport(activeClassId, studentId)
-      setReportModal(report)
-      loadStudents(activeClassId)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setGeneratingLearning(false)
-    }
+    return runPendingAction(`learning:student:${studentId}`, async () => {
+      setGeneratingLearning(true)
+      try {
+        const report = await generateStudentReport(activeClassId, studentId)
+        setReportModal(report)
+        loadStudents(activeClassId)
+      } catch (err) {
+        alert(err.message)
+      } finally {
+        setGeneratingLearning(false)
+      }
+    })
   }
 
   const handleViewStudentReport = async (studentId) => {
     if (!activeClassId) return
-    try {
-      const reports = await fetchStudentReports(activeClassId, studentId)
-      if (reports.length === 0) {
-        alert(language === 'zh' ? '暂无学情报告，请先生成' : 'No report yet, please generate first')
-        return
+    return runPendingAction(`learning:view:${studentId}`, async () => {
+      try {
+        const reports = await fetchStudentReports(activeClassId, studentId)
+        if (reports.length === 0) {
+          alert(language === 'zh' ? '暂无学情报告，请先生成' : 'No report yet, please generate first')
+          return
+        }
+        setReportModal(reports[0])
+      } catch (err) {
+        alert(err.message)
       }
-      setReportModal(reports[0])
-    } catch (err) {
-      alert(err.message)
-    }
+    })
   }
 
   const handleGenerateMyReport = async () => {
     if (!activeClassId || generatingLearning) return
-    setGeneratingLearning(true)
-    try {
-      const report = await generateMyReport(activeClassId)
-      setReportModal(report)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setGeneratingLearning(false)
-    }
+    return runPendingAction('learning:self', async () => {
+      setGeneratingLearning(true)
+      try {
+        const report = await generateMyReport(activeClassId)
+        setReportModal(report)
+      } catch (err) {
+        alert(err.message)
+      } finally {
+        setGeneratingLearning(false)
+      }
+    })
   }
 
   const handleGenerateClassFeedback = async () => {
     if (!activeClassId || generatingLearning) return
-    setGeneratingLearning(true)
-    try {
-      const feedback = await generateClassFeedback(activeClassId)
-      setFeedbackModal(feedback)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setGeneratingLearning(false)
-    }
+    return runPendingAction('learning:class', async () => {
+      setGeneratingLearning(true)
+      try {
+        const feedback = await generateClassFeedback(activeClassId)
+        setFeedbackModal(feedback)
+      } catch (err) {
+        alert(err.message)
+      } finally {
+        setGeneratingLearning(false)
+      }
+    })
   }
 
   const handleLearningAssistantToggle = () => {
@@ -540,6 +582,7 @@ function AppController() {
 
   const handleAssistantGenerate = async () => {
     if (!activeClassId || generatingLearning) return
+    return runPendingAction(`learning:assistant:${isTeacher ? 'class' : 'self'}`, async () => {
     setGeneratingLearning(true)
     setLearningAssistantError('')
     try {
@@ -556,6 +599,7 @@ function AppController() {
     } finally {
       setGeneratingLearning(false)
     }
+    })
   }
 
   const handleAssistantStudentAction = async (student) => {
@@ -568,6 +612,7 @@ function AppController() {
       return
     }
     if (generatingLearning) return
+    return runPendingAction(`learning:assistant:student:${student.id}`, async () => {
     setGeneratingLearning(true)
     setLearningAssistantError('')
     try {
@@ -579,96 +624,110 @@ function AppController() {
     } finally {
       setGeneratingLearning(false)
     }
+    })
   }
 
   const handleAddStudent = async () => {
     if (!activeClassId || !studentEmailInput.trim() || studentBusy) return
-    setStudentBusy(true)
-    try {
-      await addClassStudent(activeClassId, { email: studentEmailInput.trim().toLowerCase() })
-      setStudentEmailInput('')
-      await loadStudents(activeClassId)
-      await loadLearningAssistantStatus(activeClassId)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setStudentBusy(false)
-    }
+    return runPendingAction('student:add', async () => {
+      setStudentBusy(true)
+      try {
+        await addClassStudent(activeClassId, { email: studentEmailInput.trim().toLowerCase() })
+        setStudentEmailInput('')
+        await loadStudents(activeClassId)
+        await loadLearningAssistantStatus(activeClassId)
+      } catch (err) {
+        alert(err.message)
+      } finally {
+        setStudentBusy(false)
+      }
+    })
   }
 
   const handleRemoveStudent = async (studentId) => {
     if (!activeClassId || studentBusy) return
-    setStudentBusy(true)
-    try {
-      await removeClassStudent(activeClassId, studentId)
-      setStudents(prev => prev.filter(s => s.id !== studentId))
-      await loadLearningAssistantStatus(activeClassId)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setStudentBusy(false)
-    }
+    return runPendingAction(`student:remove:${studentId}`, async () => {
+      setStudentBusy(true)
+      try {
+        await removeClassStudent(activeClassId, studentId)
+        setStudents(prev => prev.filter(s => s.id !== studentId))
+        await loadLearningAssistantStatus(activeClassId)
+      } catch (err) {
+        alert(err.message)
+      } finally {
+        setStudentBusy(false)
+      }
+    })
   }
 
   const handleCreateClass = async () => {
     if (!classForm.name.trim()) return
-    try {
-      await createClass(classForm.name.trim())
-      setClassForm(prev => ({ ...prev, name: '' }))
-      loadClasses()
-    } catch (err) {
-      alert(err.message)
-    }
+    return runPendingAction('class:create', async () => {
+      try {
+        await createClass(classForm.name.trim())
+        setClassForm(prev => ({ ...prev, name: '' }))
+        loadClasses()
+      } catch (err) {
+        alert(err.message)
+      }
+    })
   }
 
   const handleJoinClass = async () => {
     if (!classForm.inviteCode.trim()) return
-    try {
-      await joinClass(classForm.inviteCode.trim())
-      setClassForm(prev => ({ ...prev, inviteCode: '' }))
-      loadClasses()
-      alert(t.auth.joinSuccess)
-    } catch (err) {
-      alert(err.message)
-    }
+    return runPendingAction('class:join', async () => {
+      try {
+        await joinClass(classForm.inviteCode.trim())
+        setClassForm(prev => ({ ...prev, inviteCode: '' }))
+        loadClasses()
+        alert(t.auth.joinSuccess)
+      } catch (err) {
+        alert(err.message)
+      }
+    })
   }
 
   const handleUploadMaterial = async (e) => {
     const file = e.target.files?.[0]
     if (!file || !activeClassId) return
-    try {
-      await uploadClassMaterial(activeClassId, file)
-      loadMaterials(activeClassId)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      e.target.value = ''
-    }
+    return runPendingAction('material:upload', async () => {
+      try {
+        await uploadClassMaterial(activeClassId, file)
+        loadMaterials(activeClassId)
+      } catch (err) {
+        alert(err.message)
+      } finally {
+        e.target.value = ''
+      }
+    })
   }
 
   const openMaterialFile = async (material, download = false) => {
     if (!activeClassId) return
-    try {
-      const blob = download
-        ? await fetchMaterialFile(activeClassId, material.id, true)
-        : await fetchMaterialPreview(activeClassId, material.id)
-      const url = URL.createObjectURL(blob)
+    const actionKey = `material:${download ? 'download' : 'view'}:${material.id}`
+    return runPendingAction(actionKey, async () => {
+      try {
+        const blob = download
+          ? await fetchMaterialFile(activeClassId, material.id, true)
+          : await fetchMaterialPreview(activeClassId, material.id)
+        const url = URL.createObjectURL(blob)
 
-      if (download) {
-        const link = document.createElement('a')
-        link.href = url
-        link.download = material.filename
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-      } else {
-        window.open(url, '_blank', 'noopener,noreferrer')
+        if (download) {
+          const link = document.createElement('a')
+          link.href = url
+          link.download = material.filename
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer')
+        }
+
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      } catch (err) {
+        alert(err.message)
       }
-
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    } catch (err) {
-      alert(err.message)
-    }
+    })
   }
 
   const downloadBlobFile = (blob, filename) => {
@@ -684,51 +743,57 @@ function AppController() {
 
   const handlePublishHomework = async () => {
     if (!activeClassId || !homeworkForm.title.trim() || homeworkBusy) return
-    setHomeworkBusy(true)
-    try {
-      await createHomework(activeClassId, {
-        title: homeworkForm.title.trim(),
-        description: homeworkForm.description,
-        dueAt: homeworkForm.dueAt,
-        file: homeworkFile,
-      })
-      setHomeworkForm({ title: '', description: '', dueAt: '' })
-      setHomeworkFile(null)
-      await loadHomeworks(activeClassId)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setHomeworkBusy(false)
-    }
+    return runPendingAction('homework:publish', async () => {
+      setHomeworkBusy(true)
+      try {
+        await createHomework(activeClassId, {
+          title: homeworkForm.title.trim(),
+          description: homeworkForm.description,
+          dueAt: homeworkForm.dueAt,
+          file: homeworkFile,
+        })
+        setHomeworkForm({ title: '', description: '', dueAt: '' })
+        setHomeworkFile(null)
+        await loadHomeworks(activeClassId)
+      } catch (err) {
+        alert(err.message)
+      } finally {
+        setHomeworkBusy(false)
+      }
+    })
   }
 
   const handleDeleteHomework = async (homeworkId) => {
     if (!window.confirm(t.auth.deleteHomeworkConfirm)) return
-    try {
-      await deleteHomework(homeworkId)
-      setHomeworks(prev => prev.filter(h => h.id !== homeworkId))
-      if (expandedHomeworkId === homeworkId) setExpandedHomeworkId(null)
-    } catch (err) {
-      alert(err.message)
-    }
+    return runPendingAction(`homework:delete:${homeworkId}`, async () => {
+      try {
+        await deleteHomework(homeworkId)
+        setHomeworks(prev => prev.filter(h => h.id !== homeworkId))
+        if (expandedHomeworkId === homeworkId) setExpandedHomeworkId(null)
+      } catch (err) {
+        alert(err.message)
+      }
+    })
   }
 
   const handleSubmitHomework = async (homeworkId) => {
     if (homeworkBusy) return
     const draft = submitDrafts[homeworkId] || {}
-    setHomeworkBusy(true)
-    try {
-      await submitHomework(homeworkId, {
-        content: draft.content || '',
-        file: draft.file || null,
-      })
-      setSubmitDrafts(prev => ({ ...prev, [homeworkId]: { content: '', file: null } }))
-      await loadHomeworks(activeClassId)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setHomeworkBusy(false)
-    }
+    return runPendingAction(`homework:submit:${homeworkId}`, async () => {
+      setHomeworkBusy(true)
+      try {
+        await submitHomework(homeworkId, {
+          content: draft.content || '',
+          file: draft.file || null,
+        })
+        setSubmitDrafts(prev => ({ ...prev, [homeworkId]: { content: '', file: null } }))
+        await loadHomeworks(activeClassId)
+      } catch (err) {
+        alert(err.message)
+      } finally {
+        setHomeworkBusy(false)
+      }
+    })
   }
 
   const handleToggleSubmissions = async (homeworkId) => {
@@ -736,31 +801,37 @@ function AppController() {
       setExpandedHomeworkId(null)
       return
     }
-    try {
-      const rows = await fetchHomeworkSubmissions(homeworkId)
-      setHomeworkSubmissions(prev => ({ ...prev, [homeworkId]: rows }))
-      setExpandedHomeworkId(homeworkId)
-    } catch (err) {
-      alert(err.message)
-    }
+    return runPendingAction(`homework:submissions:${homeworkId}`, async () => {
+      try {
+        const rows = await fetchHomeworkSubmissions(homeworkId)
+        setHomeworkSubmissions(prev => ({ ...prev, [homeworkId]: rows }))
+        setExpandedHomeworkId(homeworkId)
+      } catch (err) {
+        alert(err.message)
+      }
+    })
   }
 
   const handleDownloadAttachment = async (hw) => {
-    try {
-      const blob = await downloadHomeworkAttachment(hw.id)
-      downloadBlobFile(blob, hw.attachment_name || 'attachment')
-    } catch (err) {
-      alert(err.message)
-    }
+    return runPendingAction(`homework:attachment:${hw.id}`, async () => {
+      try {
+        const blob = await downloadHomeworkAttachment(hw.id)
+        downloadBlobFile(blob, hw.attachment_name || 'attachment')
+      } catch (err) {
+        alert(err.message)
+      }
+    })
   }
 
   const handleDownloadSubmission = async (sub) => {
-    try {
-      const blob = await downloadSubmissionFile(sub.id)
-      downloadBlobFile(blob, sub.filename || 'submission')
-    } catch (err) {
-      alert(err.message)
-    }
+    return runPendingAction(`submission:download:${sub.id}`, async () => {
+      try {
+        const blob = await downloadSubmissionFile(sub.id)
+        downloadBlobFile(blob, sub.filename || 'submission')
+      } catch (err) {
+        alert(err.message)
+      }
+    })
   }
 
   // 自动滚动到最新消息
@@ -813,6 +884,16 @@ function AppController() {
     setIsDragging(true)
     dragRef.current = { startX: e.clientX, startRot: dialRotation }
   }
+
+  const handleSceneSelect = useCallback((sceneKey) => {
+    const targetScene = SCENE_OPTIONS.find(scene => scene.key === sceneKey)
+    if (!targetScene) return
+    setDialRotation(currentRotation => {
+      const baseRotation = -targetScene.angle
+      const nearestTurn = Math.round((currentRotation - baseRotation) / 360)
+      return baseRotation + nearestTurn * 360
+    })
+  }, [])
 
   useEffect(() => {
     if (!isDragging) return
@@ -895,6 +976,7 @@ function AppController() {
     }
     if ((!input.trim() && !pendingImage) || isSending) return
 
+    return runPendingAction('chat:send', async () => {
     const text = input.trim()
     const displayText = text || (language === 'zh' ? '[图片]' : '[Image]')
     const userMessage = {
@@ -962,6 +1044,7 @@ function AppController() {
     } finally {
       setIsSending(false)
     }
+    })
   }
 
   const handleKeyDown = (e) => {
@@ -1009,6 +1092,7 @@ function AppController() {
     handleKeyDown,
     handleLogin,
     handleMouseDown,
+    handleSceneSelect,
     handleNewChat,
     handlePickImage,
     handlePublishHomework,
@@ -1033,6 +1117,7 @@ function AppController() {
     input,
     isDragging,
     isSending,
+    isActionPending,
     isStudent,
     isTeacher,
     language,
@@ -1123,6 +1208,7 @@ function AppController() {
           loading={learningAssistantLoading}
           status={learningAssistantStatus}
           generating={generatingLearning}
+          isActionPending={isActionPending}
           error={learningAssistantError}
           language={language}
           onToggle={handleLearningAssistantToggle}

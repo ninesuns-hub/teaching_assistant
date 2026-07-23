@@ -79,7 +79,7 @@ function StudentPanel({ text, status, generating, onGenerate, onViewLatest, onFo
       </div>
       <div className="learning-assistant-actions">
         {status?.can_generate ? (
-          <button className="learning-primary-action" onClick={onGenerate} disabled={generating}>
+          <button className="learning-primary-action" onClick={onGenerate} disabled={generating} aria-busy={generating}>
             {generating ? text.loading : latest ? text.update : text.generate}
           </button>
         ) : (
@@ -91,7 +91,7 @@ function StudentPanel({ text, status, generating, onGenerate, onViewLatest, onFo
   )
 }
 
-function TeacherPanel({ text, status, generating, onGenerate, onViewLatest, onStudentAction }) {
+function TeacherPanel({ text, status, generating, isActionPending, onGenerate, onViewLatest, onStudentAction }) {
   const total = status?.student_count ?? 0
   const active = status?.active_students ?? 0
   const ready = status?.ready_students ?? 0
@@ -115,7 +115,7 @@ function TeacherPanel({ text, status, generating, onGenerate, onViewLatest, onSt
               ? fill(text.effective, { count: student.effective_question_count })
               : fill(text.messages, { count: student.message_count ?? 0 })
             return (
-              <button key={student.id} onClick={() => onStudentAction(student)} disabled={!student.latest_report && !student.ready}>
+              <button key={student.id} onClick={() => onStudentAction(student)} disabled={generating || (!student.latest_report && !student.ready)} aria-busy={isActionPending(`learning:assistant:student:${student.id}`)}>
                 <span><strong>{student.name}</strong><small>{countText}</small></span>
                 <em className={student.latest_report ? 'has-report' : ''}>{student.latest_report ? text.reportReady : text.reportPending}</em>
               </button>
@@ -124,7 +124,7 @@ function TeacherPanel({ text, status, generating, onGenerate, onViewLatest, onSt
         </div>
       )}
       <div className="learning-assistant-actions">
-        <button className="learning-primary-action" onClick={onGenerate} disabled={generating || !active}>
+        <button className="learning-primary-action" onClick={onGenerate} disabled={generating || !active} aria-busy={generating}>
           {generating ? text.loading : latest ? text.updateClass : text.generateClass}
         </button>
         {latest && <button className="learning-text-action" onClick={() => onViewLatest(latest)}>{text.viewClass}</button>}
@@ -168,7 +168,7 @@ export function LearningReportDrawer({ value, language = 'zh', onClose }) {
   )
 }
 
-export default function LearningMascot({ role, activeClass, open, loading, status, generating, error, language = 'zh', onToggle, onClose, onGenerate, onViewLatest, onFocusChat, onGoToClasses, onStudentAction }) {
+export default function LearningMascot({ role, activeClass, open, loading, status, generating, isActionPending, error, language = 'zh', onToggle, onClose, onGenerate, onViewLatest, onFocusChat, onGoToClasses, onStudentAction }) {
   const text = copy[language] || copy.zh
   const title = role === 'teacher' ? text.teacherTitle : text.studentTitle
   const showBadge = role === 'student'
@@ -195,7 +195,7 @@ export default function LearningMascot({ role, activeClass, open, loading, statu
           {loading ? <div className="learning-assistant-loading"><i /><i /><i /><span>{text.loading}</span></div>
             : !activeClass ? <><div className="learning-assistant-letter"><p>{text.noClass}</p></div><button className="learning-primary-action" onClick={onGoToClasses}>{text.goClass}</button></>
               : role === 'teacher'
-                ? <TeacherPanel text={text} status={status} generating={generating} onGenerate={onGenerate} onViewLatest={onViewLatest} onStudentAction={onStudentAction} />
+                ? <TeacherPanel text={text} status={status} generating={generating} isActionPending={isActionPending} onGenerate={onGenerate} onViewLatest={onViewLatest} onStudentAction={onStudentAction} />
                 : <StudentPanel text={text} status={status} generating={generating} onGenerate={onGenerate} onViewLatest={onViewLatest} onFocusChat={onFocusChat} />}
         </section>
       )}

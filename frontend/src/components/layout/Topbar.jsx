@@ -44,7 +44,7 @@ export default function Topbar({
         </div>
         <div className="topbar-actions">
         <div className="settings-wrap">
-          <button type="button" className="ghost-btn" onClick={() => setSettingsOpen(!settingsOpen)}>
+          <button type="button" className="ghost-btn" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>
             {t.settings}
           </button>
           {settingsOpen && (
@@ -52,8 +52,8 @@ export default function Topbar({
               <div className="settings-item">
                 <span>{t.language}</span>
                 <div className="lang-switch">
-                  <button className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')}>EN</button>
-                  <button className={language === 'zh' ? 'active' : ''} onClick={() => setLanguage('zh')}>中文</button>
+                  <button type="button" className={language === 'en' ? 'active' : ''} aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>EN</button>
+                  <button type="button" className={language === 'zh' ? 'active' : ''} aria-pressed={language === 'zh'} onClick={() => setLanguage('zh')}>中文</button>
                 </div>
               </div>
             </div>

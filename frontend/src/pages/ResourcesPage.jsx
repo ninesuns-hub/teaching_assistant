@@ -2,7 +2,7 @@ import { RESOURCE_FILTERS } from '../config/uiContent'
 import { getMaterialCategory } from '../utils/appUtils'
 
 export default function ResourcesPage({ model }) {
-  const { activeClassId, activeFilter, classForm, classes, generatingLearning, handleAddStudent, handleCreateClass, handleGenerateClassFeedback, handleGenerateMyReport, handleGenerateStudentReport, handleJoinClass, handleRemoveStudent, handleUploadMaterial, handleViewStudentReport, isStudent, isTeacher, language, materials, openMaterialFile, secondPageTitle, setActiveClassId, setActiveFilter, setClassForm, setStudentEmailInput, setStudentsOpen, studentBusy, studentEmailInput, students, studentsOpen, t, user, visibleMaterials } = model
+  const { activeClassId, activeFilter, classForm, classes, generatingLearning, handleAddStudent, handleCreateClass, handleGenerateClassFeedback, handleGenerateMyReport, handleGenerateStudentReport, handleJoinClass, handleRemoveStudent, handleUploadMaterial, handleViewStudentReport, isActionPending, isStudent, isTeacher, language, materials, openMaterialFile, secondPageTitle, setActiveClassId, setActiveFilter, setClassForm, setStudentEmailInput, setStudentsOpen, studentBusy, studentEmailInput, students, studentsOpen, t, user, visibleMaterials } = model
 
   return (
     <section id="section-resources" className={`section section-resources ${isTeacher ? 'section-teacher' : 'section-student'}`}>
@@ -16,6 +16,7 @@ export default function ResourcesPage({ model }) {
                       key={filter}
                       type="button"
                       className={`filter-btn ${activeFilter === filter ? 'active' : ''}`}
+                      aria-pressed={activeFilter === filter}
                       onClick={() => setActiveFilter(filter)}
                     >
                       {t.filters[filter]}
@@ -34,8 +35,8 @@ export default function ResourcesPage({ model }) {
                     onChange={e => setClassForm(p => ({ ...p, name: e.target.value }))}
                     placeholder={t.auth.className}
                   />
-                  <button type="button" className="action-btn action-btn-primary" onClick={handleCreateClass}>
-                    {t.auth.createClass}
+                  <button type="button" className="action-btn action-btn-primary" disabled={isActionPending('class:create')} aria-busy={isActionPending('class:create')} onClick={handleCreateClass}>
+                    {isActionPending('class:create') ? t.auth.processing : t.auth.createClass}
                   </button>
                 </div>
                 {classes.length === 0 ? (
@@ -48,6 +49,7 @@ export default function ResourcesPage({ model }) {
                           key={c.id}
                           type="button"
                           className={`filter-btn ${activeClassId === c.id ? 'active' : ''}`}
+                          aria-pressed={activeClassId === c.id}
                           onClick={() => {
                             setActiveClassId(c.id)
                             setStudentsOpen(false)
@@ -63,9 +65,9 @@ export default function ResourcesPage({ model }) {
                       </p>
                     )}
                     {activeClassId && (
-                      <label className="upload-btn">
-                        {t.auth.uploadMaterial}
-                        <input type="file" accept=".pdf,.pptx,.ppsx" hidden onChange={handleUploadMaterial} />
+                      <label className="upload-btn" aria-busy={isActionPending('material:upload')}>
+                        {isActionPending('material:upload') ? t.auth.uploading : t.auth.uploadMaterial}
+                        <input className="visually-hidden-file-input" type="file" accept=".pdf,.pptx,.ppsx" disabled={isActionPending('material:upload')} onChange={handleUploadMaterial} />
                       </label>
                     )}
                     {activeClassId && (
@@ -76,9 +78,10 @@ export default function ResourcesPage({ model }) {
                             type="button"
                             className="solid-btn"
                             disabled={generatingLearning}
+                            aria-busy={isActionPending('learning:class')}
                             onClick={handleGenerateClassFeedback}
                           >
-                            {generatingLearning ? t.auth.generating : t.auth.generateClassFeedback}
+                            {isActionPending('learning:class') ? t.auth.generating : t.auth.generateClassFeedback}
                           </button>
                         </div>
                         <button
@@ -106,8 +109,8 @@ export default function ResourcesPage({ model }) {
                                 onChange={(e) => setStudentEmailInput(e.target.value)}
                                 placeholder={t.auth.studentEmail}
                               />
-                              <button type="button" className="action-btn action-btn-primary" disabled={studentBusy} onClick={handleAddStudent}>
-                                {t.auth.addStudent}
+                              <button type="button" className="action-btn action-btn-primary" disabled={studentBusy} aria-busy={isActionPending('student:add')} onClick={handleAddStudent}>
+                                {isActionPending('student:add') ? t.auth.processing : t.auth.addStudent}
                               </button>
                             </div>
                             {students.length === 0 ? (
@@ -119,19 +122,20 @@ export default function ResourcesPage({ model }) {
                                   <span className="muted-inline">{t.auth.messagesCount}: {s.effective_question_count ?? s.message_count}</span>
                                 </div>
                                 <div className="card-actions">
-                                  <button type="button" className="download-btn" onClick={() => handleViewStudentReport(s.id)}>
-                                    {t.auth.viewReport}
+                                  <button type="button" className="download-btn" disabled={isActionPending(`learning:view:${s.id}`)} aria-busy={isActionPending(`learning:view:${s.id}`)} onClick={() => handleViewStudentReport(s.id)}>
+                                    {isActionPending(`learning:view:${s.id}`) ? t.auth.loading : t.auth.viewReport}
                                   </button>
                                   <button
                                     type="button"
                                     className="download-btn"
                                     disabled={generatingLearning}
+                                    aria-busy={isActionPending(`learning:student:${s.id}`)}
                                     onClick={() => handleGenerateStudentReport(s.id)}
                                   >
-                                    {t.auth.generateReport}
+                                    {isActionPending(`learning:student:${s.id}`) ? t.auth.generating : t.auth.generateReport}
                                   </button>
-                                  <button type="button" className="download-btn danger" disabled={studentBusy} onClick={() => handleRemoveStudent(s.id)}>
-                                    {t.auth.removeStudent}
+                                  <button type="button" className="download-btn danger" disabled={studentBusy} aria-busy={isActionPending(`student:remove:${s.id}`)} onClick={() => handleRemoveStudent(s.id)}>
+                                    {isActionPending(`student:remove:${s.id}`) ? t.auth.deleting : t.auth.removeStudent}
                                   </button>
                                 </div>
                               </div>
@@ -156,8 +160,8 @@ export default function ResourcesPage({ model }) {
                         onChange={e => setClassForm(p => ({ ...p, inviteCode: e.target.value }))}
                         placeholder={t.auth.inviteCode}
                       />
-                      <button type="button" className="action-btn action-btn-primary" onClick={handleJoinClass}>
-                        {t.auth.joinClass}
+                      <button type="button" className="action-btn action-btn-primary" disabled={isActionPending('class:join')} aria-busy={isActionPending('class:join')} onClick={handleJoinClass}>
+                        {isActionPending('class:join') ? t.auth.processing : t.auth.joinClass}
                       </button>
                     </div>
                   </>
@@ -170,6 +174,7 @@ export default function ResourcesPage({ model }) {
                           key={c.id}
                           type="button"
                           className={`filter-btn ${activeClassId === c.id ? 'active' : ''}`}
+                          aria-pressed={activeClassId === c.id}
                           onClick={() => setActiveClassId(c.id)}
                         >
                           {c.name}
@@ -182,8 +187,8 @@ export default function ResourcesPage({ model }) {
                         onChange={e => setClassForm(p => ({ ...p, inviteCode: e.target.value }))}
                         placeholder={t.auth.inviteCode}
                       />
-                      <button type="button" className="action-btn action-btn-soft" onClick={handleJoinClass}>
-                        {t.auth.joinClass}
+                      <button type="button" className="action-btn action-btn-soft" disabled={isActionPending('class:join')} aria-busy={isActionPending('class:join')} onClick={handleJoinClass}>
+                        {isActionPending('class:join') ? t.auth.processing : t.auth.joinClass}
                       </button>
                     </div>
                     {activeClassId && (
@@ -192,9 +197,10 @@ export default function ResourcesPage({ model }) {
                           type="button"
                           className="solid-btn"
                           disabled={generatingLearning}
+                          aria-busy={isActionPending('learning:self')}
                           onClick={handleGenerateMyReport}
                         >
-                          {generatingLearning ? t.auth.generating : t.auth.generateMyReport}
+                          {isActionPending('learning:self') ? t.auth.generating : t.auth.generateMyReport}
                         </button>
                       </div>
                     )}
@@ -214,6 +220,7 @@ export default function ResourcesPage({ model }) {
                           key={filter}
                           type="button"
                           className={`filter-btn ${activeFilter === filter ? 'active' : ''}`}
+                          aria-pressed={activeFilter === filter}
                           onClick={() => setActiveFilter(filter)}
                         >
                           {t.filters[filter]}
@@ -235,11 +242,11 @@ export default function ResourcesPage({ model }) {
                     <div className="card-footer">
                       <span>{m.uploaded_at?.slice(0, 10)}</span>
                       <div className="card-actions">
-                        <button type="button" className="download-btn" onClick={() => openMaterialFile(m, false)}>
-                          {t.view}
+                        <button type="button" className="download-btn" disabled={isActionPending(`material:view:${m.id}`)} aria-busy={isActionPending(`material:view:${m.id}`)} onClick={() => openMaterialFile(m, false)}>
+                          {isActionPending(`material:view:${m.id}`) ? t.auth.opening : t.view}
                         </button>
-                        <button type="button" className="download-btn" onClick={() => openMaterialFile(m, true)}>
-                          {t.download}
+                        <button type="button" className="download-btn" disabled={isActionPending(`material:download:${m.id}`)} aria-busy={isActionPending(`material:download:${m.id}`)} onClick={() => openMaterialFile(m, true)}>
+                          {isActionPending(`material:download:${m.id}`) ? t.auth.downloading : t.download}
                         </button>
                       </div>
                     </div>

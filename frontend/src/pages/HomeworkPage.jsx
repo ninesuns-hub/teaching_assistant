@@ -1,7 +1,7 @@
 
 
 export default function HomeworkPage({ model }) {
-  const { activeClassId, expandedHomeworkId, handleDeleteHomework, handleDownloadAttachment, handleDownloadSubmission, handlePublishHomework, handleSubmitHomework, handleToggleSubmissions, homeworkBusy, homeworkFile, homeworkForm, homeworks, homeworkSubmissions, isStudent, isTeacher, setHomeworkFile, setHomeworkForm, setSubmitDrafts, submitDrafts, t } = model
+  const { activeClassId, expandedHomeworkId, handleDeleteHomework, handleDownloadAttachment, handleDownloadSubmission, handlePublishHomework, handleSubmitHomework, handleToggleSubmissions, homeworkBusy, homeworkFile, homeworkForm, homeworks, homeworkSubmissions, isActionPending, isStudent, isTeacher, setHomeworkFile, setHomeworkForm, setSubmitDrafts, submitDrafts, t } = model
 
   return (
     <section id="section-homework" className="section section-homework">
@@ -36,7 +36,8 @@ export default function HomeworkPage({ model }) {
                         <input
                           type="file"
                           accept=".pdf,.pptx,.ppsx,.doc,.docx,.zip,.png,.jpg,.jpeg"
-                          hidden
+                          className="visually-hidden-file-input"
+                          disabled={homeworkBusy}
                           onChange={e => setHomeworkFile(e.target.files?.[0] || null)}
                         />
                       </label>
@@ -44,9 +45,10 @@ export default function HomeworkPage({ model }) {
                         type="button"
                         className="action-btn action-btn-primary"
                         disabled={homeworkBusy || !homeworkForm.title.trim()}
+                        aria-busy={isActionPending('homework:publish')}
                         onClick={handlePublishHomework}
                       >
-                        {t.auth.publishHomework}
+                        {isActionPending('homework:publish') ? t.auth.publishing : t.auth.publishHomework}
                       </button>
                     </div>
                   </div>
@@ -79,17 +81,17 @@ export default function HomeworkPage({ model }) {
                             </div>
                             <div className="homework-card-actions">
                               {hw.has_attachment && (
-                                <button type="button" className="download-btn" onClick={() => handleDownloadAttachment(hw)}>
-                                  {t.auth.downloadAttachment}
+                                <button type="button" className="download-btn" disabled={isActionPending(`homework:attachment:${hw.id}`)} aria-busy={isActionPending(`homework:attachment:${hw.id}`)} onClick={() => handleDownloadAttachment(hw)}>
+                                  {isActionPending(`homework:attachment:${hw.id}`) ? t.auth.downloading : t.auth.downloadAttachment}
                                 </button>
                               )}
                               {isTeacher && (
                                 <>
-                                  <button type="button" className="download-btn" onClick={() => handleToggleSubmissions(hw.id)}>
-                                    {expandedHomeworkId === hw.id ? t.auth.hideSubmissions : t.auth.viewSubmissions}
+                                  <button type="button" className="download-btn" disabled={isActionPending(`homework:submissions:${hw.id}`)} aria-busy={isActionPending(`homework:submissions:${hw.id}`)} onClick={() => handleToggleSubmissions(hw.id)}>
+                                    {isActionPending(`homework:submissions:${hw.id}`) ? t.auth.loading : (expandedHomeworkId === hw.id ? t.auth.hideSubmissions : t.auth.viewSubmissions)}
                                   </button>
-                                  <button type="button" className="download-btn danger" onClick={() => handleDeleteHomework(hw.id)}>
-                                    {t.auth.deleteHomework}
+                                  <button type="button" className="download-btn danger" disabled={isActionPending(`homework:delete:${hw.id}`)} aria-busy={isActionPending(`homework:delete:${hw.id}`)} onClick={() => handleDeleteHomework(hw.id)}>
+                                    {isActionPending(`homework:delete:${hw.id}`) ? t.auth.deleting : t.auth.deleteHomework}
                                   </button>
                                 </>
                               )}
@@ -113,7 +115,8 @@ export default function HomeworkPage({ model }) {
                                   <input
                                     type="file"
                                     accept=".pdf,.pptx,.ppsx,.doc,.docx,.zip,.png,.jpg,.jpeg"
-                                    hidden
+                                    className="visually-hidden-file-input"
+                                    disabled={homeworkBusy}
                                     onChange={e => setSubmitDrafts(prev => ({
                                       ...prev,
                                       [hw.id]: { ...draft, file: e.target.files?.[0] || null },
@@ -124,9 +127,10 @@ export default function HomeworkPage({ model }) {
                                   type="button"
                                   className="action-btn action-btn-primary"
                                   disabled={homeworkBusy}
+                                  aria-busy={isActionPending(`homework:submit:${hw.id}`)}
                                   onClick={() => handleSubmitHomework(hw.id)}
                                 >
-                                  {hw.my_submission ? t.auth.resubmitHomework : t.auth.submitHomework}
+                                  {isActionPending(`homework:submit:${hw.id}`) ? t.auth.submitting : (hw.my_submission ? t.auth.resubmitHomework : t.auth.submitHomework)}
                                 </button>
                               </div>
                               {hw.my_submission?.filename && (
@@ -147,8 +151,8 @@ export default function HomeworkPage({ model }) {
                                     <span className="muted-inline">{sub.submitted_at?.slice(0, 16).replace('T', ' ')}</span>
                                   </div>
                                   {sub.has_file && (
-                                    <button type="button" className="download-btn" onClick={() => handleDownloadSubmission(sub)}>
-                                      {sub.filename || t.download}
+                                    <button type="button" className="download-btn" disabled={isActionPending(`submission:download:${sub.id}`)} aria-busy={isActionPending(`submission:download:${sub.id}`)} onClick={() => handleDownloadSubmission(sub)}>
+                                      {isActionPending(`submission:download:${sub.id}`) ? t.auth.downloading : (sub.filename || t.download)}
                                     </button>
                                   )}
                                 </div>

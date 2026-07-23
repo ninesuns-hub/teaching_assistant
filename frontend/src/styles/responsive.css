@@ -52,6 +52,23 @@
 }
 
 @media (max-width: 700px) {
+  .auth-modal,
+  .report-modal {
+    width: calc(100% - 24px);
+    max-height: calc(100dvh - 24px);
+    padding: 32px 24px;
+    overflow-y: auto;
+  }
+
+  .modal-close {
+    top: 16px;
+    right: 16px;
+  }
+
+  .auth-form {
+    gap: 16px;
+  }
+
   .brand-text {
     display: none;
   }

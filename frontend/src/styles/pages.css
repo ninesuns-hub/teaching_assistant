@@ -70,9 +70,9 @@
   padding: 8px 20px;
   border-radius: var(--radius-panel);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   transition: background-color 0.3s, color 0.3s, border-color 0.3s, transform 0.3s;
-  opacity: 0.6;
+  color: var(--color-text-meta);
 }
 
 .filter-btn.active {
@@ -107,10 +107,10 @@
 }
 
 .card-type {
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  opacity: 0.5;
+  color: var(--color-text-meta);
   margin-bottom: 18px;
 }
 
@@ -123,7 +123,7 @@
 .resource-card p {
   font-size: 15px;
   line-height: 1.5;
-  opacity: 0.7;
+  color: var(--color-text-meta);
   margin-bottom: 24px;
 }
 
@@ -141,8 +141,8 @@
 }
 
 .card-footer span {
-  font-size: 12px;
-  opacity: 0.5;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-meta);
 }
 
 .download-btn {
@@ -152,11 +152,15 @@
   padding: 6px 16px;
   border-radius: var(--radius-control);
   cursor: pointer;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-meta);
   transition: background-color 0.3s, color 0.3s, border-color 0.3s, transform 0.3s;
 }
 
-.download-btn:hover {
+.download-btn:hover:not(:disabled) {
   background: var(--color-text-primary);
   color: var(--color-canvas);
 }
@@ -219,7 +223,7 @@
   padding: 0 7px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -231,8 +235,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  opacity: 0.55;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-meta);
 }
 
 .students-fold-meta svg {
@@ -273,6 +277,7 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(0, 0, 0, 0.18);
   color: inherit;
+  font-size: var(--font-size-body);
 }
 
 .student-row {
@@ -287,8 +292,8 @@
 
 .muted-inline {
   display: block;
-  font-size: 12px;
-  opacity: 0.6;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-meta);
   margin-top: 4px;
 }
 
@@ -355,7 +360,11 @@
   cursor: pointer;
   padding: 11px 18px;
   border-radius: var(--radius-control);
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-control);
   font-weight: 600;
   white-space: nowrap;
   transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease;
@@ -366,7 +375,10 @@
 }
 
 .action-btn:disabled {
-  opacity: 0.4;
+  opacity: 1;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-bg);
+  border: 1px solid var(--color-disabled-border);
   cursor: not-allowed;
 }
 
@@ -455,13 +467,13 @@
 
 .homework-card h4 {
   margin: 0 0 8px;
-  font-size: 16px;
+  font-size: var(--font-size-subheading);
 }
 
 .homework-desc {
   margin: 0 0 8px;
-  opacity: 0.75;
-  font-size: 14px;
+  color: var(--color-text-meta);
+  font-size: var(--font-size-control);
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -470,8 +482,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px 14px;
-  font-size: 12px;
-  opacity: 0.6;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-meta);
 }
 
 .homework-card-actions {
@@ -508,7 +520,7 @@
 }
 
 .status-done {
-  color: #9ad7b3;
+  color: var(--color-status-done);
 }
 
 .status-pending {
@@ -516,10 +528,10 @@
 }
 
 .download-btn.danger {
-  opacity: 0.75;
+  opacity: 1;
 }
 
-.download-btn.danger:hover {
+.download-btn.danger:hover:not(:disabled) {
   opacity: 1;
   background: rgba(255, 120, 100, 0.18);
 }
@@ -542,19 +554,23 @@
 }
 
 .upload-btn {
-  display: inline-block;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   margin-top: 8px;
   padding: 8px 16px;
   border-radius: var(--radius-control);
   background: rgba(255, 255, 255, 0.15);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-control);
 }
 
 .invite-code-display {
   margin: 8px 0;
-  font-size: 14px;
-  opacity: 0.9;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-meta);
 }
 
 .invite-code-display strong {
@@ -574,8 +590,8 @@
 .form-group small {
   display: block;
   margin-top: 4px;
-  font-size: 12px;
-  opacity: 0.6;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-meta);
 }
 
 /* Semantic page surfaces */
@@ -595,7 +611,7 @@
 }
 
 .resource-card:hover,
-.students-fold-toggle:hover {
+.students-fold-toggle:hover:not(:disabled) {
   background: var(--color-surface-hover);
   border-color: var(--color-border-strong);
 }
@@ -609,7 +625,7 @@
 
 .filter-btn.active,
 .action-btn-primary,
-.download-btn:hover {
+.download-btn:hover:not(:disabled) {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
 }
@@ -622,6 +638,36 @@
   background: var(--color-surface-2);
   border-color: var(--color-border-subtle);
   color: var(--color-text-primary);
+}
+
+.class-actions input::placeholder,
+.student-manage-row input::placeholder,
+.homework-publish input::placeholder,
+.homework-publish textarea::placeholder,
+.homework-submit textarea::placeholder {
+  color: var(--color-placeholder);
+  opacity: 1;
+}
+
+.filter-btn:hover:not(:disabled),
+.upload-btn:hover:not(:has(input:disabled)) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.download-btn:disabled,
+.filter-btn:disabled,
+.upload-btn:has(input:disabled) {
+  opacity: 1;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-bg);
+  border-color: var(--color-disabled-border);
+  cursor: not-allowed;
+}
+
+.upload-btn:focus-within {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
 }
 
 

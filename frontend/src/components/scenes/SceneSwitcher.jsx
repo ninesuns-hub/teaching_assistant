@@ -18,7 +18,7 @@ function LineIcon({ type }) {
   )
 }
 
-export default function SceneSwitcher({ scenes, activeScene, rotation, dragging, opacity, onMouseDown }) {
+export default function SceneSwitcher({ scenes, activeScene, rotation, dragging, opacity, language, onMouseDown, onSceneSelect }) {
   return (
     <div className="scene-dial-wrap" style={{ opacity }}>
       <div className="dial-pointer" aria-hidden="true" />
@@ -35,13 +35,25 @@ export default function SceneSwitcher({ scenes, activeScene, rotation, dragging,
         <div className="dial-divider" style={{ transform: 'rotate(180deg)' }} />
         <div className="dial-divider" style={{ transform: 'rotate(300deg)' }} />
         {scenes.map((scene, index) => (
-          <div
+          <button
             key={scene.key}
+            type="button"
             className={`dial-item ${activeScene === scene.key ? 'active' : ''}`}
             style={{ transform: `rotate(${index * 120}deg) translateY(-38px) rotate(${-index * 120 - rotation}deg)` }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={() => onSceneSelect(scene.key)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onSceneSelect(scene.key)
+              }
+            }}
+            aria-label={scene.label[language]}
+            aria-pressed={activeScene === scene.key}
+            title={scene.label[language]}
           >
             <LineIcon type={scene.key} />
-          </div>
+          </button>
         ))}
       </div>
     </div>
