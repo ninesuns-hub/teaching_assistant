@@ -4,11 +4,13 @@ import { AuthImage, MessageActionIcon } from '../components/chat/MessageParts'
 import SceneSwitcher from '../components/scenes/SceneSwitcher'
 
 export default function ChatPage({ model }) {
-  const { SCENE_OPTIONS, activeQuote, activeSceneKey, canChat, chatOpacity, chatPlaceholder, composerInputRef, dialRotation, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMouseDown, handlePickImage, handleRefreshExamples, handleSceneSelect, handleSend, imageInputRef, input, isDragging, isSending, language, messages, messagesEndRef, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
-  const isWelcome = messages.length === 0
+  const { SCENE_OPTIONS, activeQuote, activeSceneKey, canChat, chatOpacity, chatPlaceholder, composerInputRef, conversationLoading, dialRotation, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMessagesScroll, handleMouseDown, handlePickImage, handleRefreshExamples, handleSceneSelect, handleSend, imageInputRef, input, isDragging, isSending, language, messages, messagesEndRef, messagesListRef, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
+  const isWelcome = messages.length === 0 && !conversationLoading
   const composerProps = {
-    canChat,
-    chatPlaceholder,
+    canChat: canChat && !conversationLoading,
+    chatPlaceholder: conversationLoading
+      ? language === 'zh' ? '正在加载当前对话…' : 'Loading this conversation…'
+      : chatPlaceholder,
     composerInputRef,
     handleKeyDown,
     handlePickImage,
@@ -65,7 +67,17 @@ export default function ChatPage({ model }) {
           </div>
         ) : (
           <>
-            <div className="messages-list has-messages">
+            <div ref={messagesListRef} className="messages-list has-messages" onScroll={handleMessagesScroll}>
+              {conversationLoading && (
+                <div className="conversation-loading" aria-live="polite">
+                  <div className="thinking-indicator">
+                    <span />
+                    <span />
+                    <span />
+                    <em>{language === 'zh' ? '正在加载对话' : 'Loading conversation'}</em>
+                  </div>
+                </div>
+              )}
               {messages.map((message, index) => (
                 <div key={message.id || index} className={`message-item ${message.role}`}>
                   <div className="message-content">

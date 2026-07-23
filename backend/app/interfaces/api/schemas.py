@@ -3,7 +3,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 class ChatRequest(BaseModel):
     message: str = ""
-    conversation_id: int | None = None
+    conversation_id: str | None = None
     class_id: int | None = None
     image_base64: str | None = None
     image_mime: str | None = None
@@ -114,7 +114,7 @@ class MaterialResponse(BaseModel):
 
 
 class ConversationResponse(BaseModel):
-    id: int
+    id: str
     title: str
     class_id: int | None
     created_at: str

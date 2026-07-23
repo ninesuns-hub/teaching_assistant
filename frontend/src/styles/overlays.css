@@ -273,7 +273,6 @@
 }
 
 .auth-modal,
-.report-modal,
 .settings-menu {
   background: var(--color-surface-2);
   border-color: var(--color-border-subtle);

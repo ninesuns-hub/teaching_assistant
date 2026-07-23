@@ -7,6 +7,20 @@
   background-image: var(--sky-core);
   pointer-events: none;
   transition: opacity 0.1s linear;
+  visibility: hidden;
+}
+
+.scene-layer.is-visible {
+  visibility: visible;
+  will-change: opacity;
+}
+
+.scene-layer:not(.is-visible) .scene-halo,
+.scene-layer:not(.is-visible) .scene-motion,
+.scene-layer:not(.is-visible) .scene-motion-secondary,
+.scene-layer:not(.is-visible) .scene-meteor,
+.scene-layer:not(.is-visible) .scene-meteor::before {
+  animation-play-state: paused;
 }
 
 .scene-layer::before {
@@ -163,7 +177,7 @@
     /* 下部极淡的轻柔珊瑚红余晖 */
     radial-gradient(ellipse at 40% 82%, rgba(224, 177, 167, 0.07) 0, transparent 48%);
 
-  filter: blur(95px); /* 略微微调模糊度，保证色彩融化般自然无界 */
+  filter: blur(60px);
   animation: sunset-flow 28s ease-in-out infinite alternate;
 }
 
@@ -236,8 +250,8 @@
 }
 
 @keyframes sunset-flow {
-  from { transform: scale(1) translate(-2%, -2%); filter: blur(40px); }
-  to { transform: scale(1.1) translate(2%, 2%); filter: blur(60px); }
+  from { transform: scale(1) translate(-2%, -2%); opacity: 0.82; }
+  to { transform: scale(1.1) translate(2%, 2%); opacity: 1; }
 }
 
 @keyframes night-stars-near {

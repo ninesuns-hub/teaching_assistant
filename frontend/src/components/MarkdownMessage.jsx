@@ -1,9 +1,8 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { Children, isValidElement, memo, useEffect, useId, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import mermaid from 'mermaid'
 import 'katex/dist/katex.min.css'
 
 const MERMAID_SCENE_THEMES = {
@@ -43,10 +42,25 @@ const MERMAID_SCENE_THEMES = {
 }
 
 let mermaidRenderQueue = Promise.resolve()
+let mermaidModulePromise
+const mermaidRenderCache = new Map()
+const MERMAID_CACHE_LIMIT = 30
+
+function loadMermaid() {
+  if (!mermaidModulePromise) {
+    mermaidModulePromise = import('mermaid').then(module => module.default)
+  }
+  return mermaidModulePromise
+}
 
 function renderMermaidDiagram(diagramId, chart, scene) {
+  const cacheKey = `${scene}\u0000${chart}`
+  const cachedRender = mermaidRenderCache.get(cacheKey)
+  if (cachedRender) return cachedRender
+
   const themeVariables = MERMAID_SCENE_THEMES[scene] || MERMAID_SCENE_THEMES.night
-  const renderTask = mermaidRenderQueue.then(() => {
+  const renderTask = mermaidRenderQueue.then(async () => {
+    const mermaid = await loadMermaid()
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
@@ -64,6 +78,11 @@ function renderMermaidDiagram(diagramId, chart, scene) {
     return mermaid.render(diagramId, chart)
   })
 
+  mermaidRenderCache.set(cacheKey, renderTask)
+  if (mermaidRenderCache.size > MERMAID_CACHE_LIMIT) {
+    mermaidRenderCache.delete(mermaidRenderCache.keys().next().value)
+  }
+  renderTask.catch(() => mermaidRenderCache.delete(cacheKey))
   mermaidRenderQueue = renderTask.catch(() => undefined)
   return renderTask
 }
@@ -135,6 +154,17 @@ function MarkdownCode({ inline, className, children, scene, ...props }) {
   )
 }
 
+function MarkdownPre({ children, ...props }) {
+  const child = Children.toArray(children)[0]
+  const className = isValidElement(child) ? child.props.className || '' : ''
+
+  if (/\blanguage-mermaid\b/.test(className)) {
+    return <>{children}</>
+  }
+
+  return <pre {...props}>{children}</pre>
+}
+
 function normalizeMathContent(content) {
   if (!content) return ''
 
@@ -178,13 +208,14 @@ function normalizeMathContent(content) {
   return text
 }
 
-export default function MarkdownMessage({ content, scene = 'night' }) {
+function MarkdownMessage({ content, scene = 'night' }) {
   const normalized = useMemo(() => normalizeMathContent(content), [content])
   const markdownComponents = useMemo(
     () => ({
       code: function SceneMarkdownCode(props) {
         return <MarkdownCode {...props} scene={scene} />
       },
+      pre: MarkdownPre,
     }),
     [scene],
   )
@@ -201,3 +232,5 @@ export default function MarkdownMessage({ content, scene = 'night' }) {
     </div>
   )
 }
+
+export default memo(MarkdownMessage)

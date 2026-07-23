@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 from datetime import datetime
 from typing import List, Optional
 
@@ -14,16 +15,21 @@ def create_conversation(
     class_id: Optional[int] = None,
     title: str = "新对话",
 ) -> Conversation:
-    conversation = Conversation(user_id=user_id, class_id=class_id, title=title)
+    conversation = Conversation(
+        public_id=str(uuid.uuid4()),
+        user_id=user_id,
+        class_id=class_id,
+        title=title,
+    )
     db.add(conversation)
     db.commit()
     db.refresh(conversation)
     return conversation
 
 
-def get_conversation(db: Session, conversation_id: int, user_id: int) -> Optional[Conversation]:
+def get_conversation(db: Session, public_id: str, user_id: int) -> Optional[Conversation]:
     return db.query(Conversation).filter(
-        Conversation.id == conversation_id,
+        Conversation.public_id == public_id,
         Conversation.user_id == user_id,
     ).first()
 
@@ -38,8 +44,8 @@ def list_user_conversations(db: Session, user_id: int, limit: int = 50) -> List[
     )
 
 
-def delete_conversation(db: Session, conversation_id: int, user_id: int) -> bool:
-    conversation = get_conversation(db, conversation_id, user_id)
+def delete_conversation(db: Session, public_id: str, user_id: int) -> bool:
+    conversation = get_conversation(db, public_id, user_id)
     if not conversation:
         return False
     db.delete(conversation)

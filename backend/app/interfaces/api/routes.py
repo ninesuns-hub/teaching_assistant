@@ -197,7 +197,7 @@ def chat(
                 image_path,
             ),
             media_type="text/event-stream",
-            headers={"X-Conversation-Id": str(conversation.id)},
+            headers={"X-Conversation-Id": conversation.public_id},
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="图片文件不存在")

@@ -11,7 +11,6 @@ import {
   generateStudentReport,
   generateMyReport,
   generateClassFeedback,
-  fetchStudentReports,
   fetchLearningAssistantStatus,
 } from '../api/learning'
 import {
@@ -71,13 +70,12 @@ function AppController() {
   const [classForm, setClassForm] = useState({ name: '', inviteCode: '' })
   const [conversationId, setConversationId] = useState(null)
   const [conversations, setConversations] = useState([])
+  const [conversationLoading, setConversationLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [students, setStudents] = useState([])
   const [studentsOpen, setStudentsOpen] = useState(false)
   const [studentEmailInput, setStudentEmailInput] = useState('')
   const [studentBusy, setStudentBusy] = useState(false)
-  const [reportModal, setReportModal] = useState(null)
-  const [feedbackModal, setFeedbackModal] = useState(null)
   const [generatingLearning, setGeneratingLearning] = useState(false)
   const [learningAssistantOpen, setLearningAssistantOpen] = useState(false)
   const [learningAssistantStatus, setLearningAssistantStatus] = useState(null)
@@ -87,6 +85,8 @@ function AppController() {
   const [pendingImage, setPendingImage] = useState(null)
   const imageInputRef = useRef(null)
   const welcomeRequestRef = useRef(null)
+  const conversationRequestRef = useRef(0)
+  const loadedConversationIdRef = useRef(null)
   const [language, setLanguage] = useState('zh')
   const [activeFilter, setActiveFilter] = useState('All')
   const [exampleGroupIndex, setExampleGroupIndex] = useState(0)
@@ -94,7 +94,10 @@ function AppController() {
   const [dialRotation, setDialRotation] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const dragRef = useRef({ startX: 0, startRot: 0 })
+  const messagesListRef = useRef(null)
   const messagesEndRef = useRef(null)
+  const shouldAutoScrollRef = useRef(true)
+  const scrollFrameRef = useRef(null)
   const composerInputRef = useRef(null)
   const pendingActionsRef = useRef(new Set())
   const [pendingActions, setPendingActions] = useState({})
@@ -225,10 +228,31 @@ function AppController() {
     }
   }, [user?.role])
 
+  const resetConversationState = useCallback(() => {
+    conversationRequestRef.current += 1
+    loadedConversationIdRef.current = null
+    shouldAutoScrollRef.current = true
+    setConversationLoading(false)
+    setConversationId(null)
+    setMessages([])
+    welcomeRequestRef.current = null
+    setWelcomeContent('')
+    setWelcomeLoading(false)
+    setExampleGroupIndex(0)
+  }, [])
+
   const selectConversation = useCallback(async (id) => {
+    const requestId = conversationRequestRef.current + 1
+    conversationRequestRef.current = requestId
+    shouldAutoScrollRef.current = true
+    setConversationLoading(true)
+    setConversationId(id)
+    setMessages([])
+    setWelcomeContent('')
+    setWelcomeLoading(false)
     try {
-      setConversationId(id)
       const msgs = await fetchConversationMessages(id)
+      if (conversationRequestRef.current !== requestId) return false
       setMessages(msgs.map(m => ({
         id: m.id,
         role: m.role,
@@ -236,21 +260,21 @@ function AppController() {
         imagePath: m.image_url || null,
         feedback: m.feedback || null,
       })))
+      loadedConversationIdRef.current = id
+      return true
     } catch (err) {
       console.error(err)
+      if (conversationRequestRef.current === requestId) {
+        resetConversationState()
+        navigate('/chat', { replace: true })
+      }
+      return false
+    } finally {
+      if (conversationRequestRef.current === requestId) {
+        setConversationLoading(false)
+      }
     }
-  }, [])
-
-  const loadLatestConversation = useCallback(async () => {
-    if (!user?.role) return
-    const convs = await loadConversations()
-    if (convs.length > 0) {
-      await selectConversation(convs[0].id)
-    } else {
-      setConversationId(null)
-      setMessages([])
-    }
-  }, [user?.role, loadConversations, selectConversation])
+  }, [navigate, resetConversationState])
 
   const loadStudents = useCallback(async (classId) => {
     if (!classId || user?.role !== 'teacher') return
@@ -302,11 +326,36 @@ function AppController() {
     }
   }, [user?.role, language, students])
   useEffect(() => {
-    if (user?.role) loadLatestConversation()
-  }, [user?.role, loadLatestConversation])
+    if (user?.role) loadConversations()
+  }, [user?.role, loadConversations])
 
   useEffect(() => {
-    if (!canChat || conversationId || messages.length > 0) return
+    if (!location.pathname.startsWith('/chat')) return
+
+    if (location.pathname === '/chat') {
+      resetConversationState()
+      return
+    }
+
+    const match = /^\/chat\/([^/]+)$/.exec(location.pathname)
+    const routeId = match?.[1]?.toLowerCase() || ''
+    const isPublicConversationId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(routeId)
+    if (!isPublicConversationId) {
+      resetConversationState()
+      navigate('/chat', { replace: true })
+      return
+    }
+
+    if (!user?.role) return
+    if (loadedConversationIdRef.current === routeId) {
+      setConversationId(routeId)
+      return
+    }
+    selectConversation(routeId)
+  }, [location.pathname, navigate, resetConversationState, selectConversation, user?.role])
+
+  useEffect(() => {
+    if (activeSection !== 'chat' || conversationLoading || !canChat || conversationId || messages.length > 0) return
     const key = `${user?.email || 'user'}:${user?.role || 'none'}:${activeClassId || 'none'}`
     if (welcomeRequestRef.current === key) return
 
@@ -329,7 +378,7 @@ function AppController() {
     return () => {
       cancelled = true
     }
-  }, [canChat, conversationId, messages.length, activeClassId, user?.email, user?.role])
+  }, [activeSection, canChat, conversationId, conversationLoading, messages.length, activeClassId, user?.email, user?.role])
 
   useEffect(() => {
     if (activeClassId && isTeacher) loadStudents(activeClassId)
@@ -364,7 +413,8 @@ function AppController() {
     }
     setAuth(data.access_token, nextUser)
     setUser(nextUser)
-    setExampleGroupIndex(0)
+    resetConversationState()
+    navigate('/chat', { replace: true })
     setAuthModal(null)
     if (data.needs_role_selection) setRoleModalOpen(true)
   }
@@ -447,7 +497,8 @@ function AppController() {
       const nextUser = { ...user, role: data.role, needs_role_selection: false }
       setAuth(data.access_token, nextUser)
       setUser(nextUser)
-      setExampleGroupIndex(0)
+      resetConversationState()
+      navigate('/chat', { replace: true })
       setRoleModalOpen(false)
     } catch (err) {
       setAuthError(err.message)
@@ -461,10 +512,7 @@ function AppController() {
     clearAuth()
     navigate('/chat', { replace: true })
     setUser(null)
-    setExampleGroupIndex(0)
-    welcomeRequestRef.current = null
-    setWelcomeContent('')
-    setWelcomeLoading(false)
+    resetConversationState()
     setClasses([])
     setMaterials([])
     setHomeworks([])
@@ -474,26 +522,20 @@ function AppController() {
     setHomeworkSubmissions({})
     setSubmitDrafts({})
     setActiveClassId(null)
-    setMessages([])
-    setConversationId(null)
     setConversations([])
     setSidebarOpen(false)
     setStudents([])
     setStudentsOpen(false)
-    setReportModal(null)
-    setFeedbackModal(null)
   }
 
   const handleNewChat = () => {
-    setConversationId(null)
-    setMessages([])
-    welcomeRequestRef.current = null
-    setWelcomeContent('')
-    setExampleGroupIndex(0)
+    resetConversationState()
+    navigate('/chat')
+    setSidebarOpen(false)
   }
 
-  const handleSelectConversation = async (id) => {
-    await selectConversation(id)
+  const handleSelectConversation = (id) => {
+    navigate(`/chat/${id}`)
     setSidebarOpen(false)
   }
 
@@ -504,74 +546,12 @@ function AppController() {
       await deleteConversation(id)
       setConversations(prev => prev.filter(c => c.id !== id))
       if (conversationId === id) {
-        setConversationId(null)
-        setMessages([])
+        resetConversationState()
+        navigate('/chat', { replace: true })
       }
     } catch (err) {
       alert(err.message || (language === 'zh' ? '删除失败' : 'Delete failed'))
     }
-  }
-
-  const handleGenerateStudentReport = async (studentId) => {
-    if (!activeClassId || generatingLearning) return
-    return runPendingAction(`learning:student:${studentId}`, async () => {
-      setGeneratingLearning(true)
-      try {
-        const report = await generateStudentReport(activeClassId, studentId)
-        setReportModal(report)
-        loadStudents(activeClassId)
-      } catch (err) {
-        alert(err.message)
-      } finally {
-        setGeneratingLearning(false)
-      }
-    })
-  }
-
-  const handleViewStudentReport = async (studentId) => {
-    if (!activeClassId) return
-    return runPendingAction(`learning:view:${studentId}`, async () => {
-      try {
-        const reports = await fetchStudentReports(activeClassId, studentId)
-        if (reports.length === 0) {
-          alert(language === 'zh' ? '暂无学情报告，请先生成' : 'No report yet, please generate first')
-          return
-        }
-        setReportModal(reports[0])
-      } catch (err) {
-        alert(err.message)
-      }
-    })
-  }
-
-  const handleGenerateMyReport = async () => {
-    if (!activeClassId || generatingLearning) return
-    return runPendingAction('learning:self', async () => {
-      setGeneratingLearning(true)
-      try {
-        const report = await generateMyReport(activeClassId)
-        setReportModal(report)
-      } catch (err) {
-        alert(err.message)
-      } finally {
-        setGeneratingLearning(false)
-      }
-    })
-  }
-
-  const handleGenerateClassFeedback = async () => {
-    if (!activeClassId || generatingLearning) return
-    return runPendingAction('learning:class', async () => {
-      setGeneratingLearning(true)
-      try {
-        const feedback = await generateClassFeedback(activeClassId)
-        setFeedbackModal(feedback)
-      } catch (err) {
-        alert(err.message)
-      } finally {
-        setGeneratingLearning(false)
-      }
-    })
   }
 
   const handleLearningAssistantToggle = () => {
@@ -674,15 +654,18 @@ function AppController() {
   }
 
   const handleJoinClass = async () => {
-    if (!classForm.inviteCode.trim()) return
+    if (!classForm.inviteCode.trim()) return null
     return runPendingAction('class:join', async () => {
       try {
-        await joinClass(classForm.inviteCode.trim())
+        const joinedClass = await joinClass(classForm.inviteCode.trim())
         setClassForm(prev => ({ ...prev, inviteCode: '' }))
-        loadClasses()
+        await loadClasses()
+        setActiveClassId(joinedClass.id)
         alert(t.auth.joinSuccess)
+        return joinedClass
       } catch (err) {
         alert(err.message)
+        return null
       }
     })
   }
@@ -834,17 +817,35 @@ function AppController() {
     })
   }
 
-  // 自动滚动到最新消息
+  const handleMessagesScroll = useCallback(() => {
+    const container = messagesListRef.current
+    if (!container) return
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    shouldAutoScrollRef.current = distanceFromBottom <= 96
+  }, [])
+
+  // Coalesce streamed updates into one scroll per frame and respect manual reading.
   useEffect(() => {
-    if (messagesEndRef.current) {
-      // 关键：只在消息列表容器内滚动，不影响全局
-      messagesEndRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest', // 避免滚动整个页面
-        inline: 'start'
-      })
+    const container = messagesListRef.current
+    if (!container || !shouldAutoScrollRef.current) return undefined
+
+    if (scrollFrameRef.current) return undefined
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight
+      scrollFrameRef.current = null
+    })
+
+    return undefined
+  }, [messages, conversationLoading])
+
+  useEffect(() => {
+    return () => {
+      if (scrollFrameRef.current) {
+        cancelAnimationFrame(scrollFrameRef.current)
+        scrollFrameRef.current = null
+      }
     }
-  }, [messages])
+  }, [])
 
   // Initialize dial based on current time
   useEffect(() => {
@@ -988,6 +989,7 @@ function AppController() {
       ? { image_base64: pendingImage.base64, image_mime: pendingImage.mime }
       : {}
 
+    shouldAutoScrollRef.current = true
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setPendingImage(null)
@@ -1020,7 +1022,7 @@ function AppController() {
       })
       if (newConversationId) {
         setConversationId(newConversationId)
-        loadConversations()
+        await loadConversations()
         const persistedMessages = await fetchConversationMessages(newConversationId)
         setMessages(persistedMessages.map(m => ({
           id: m.id,
@@ -1029,6 +1031,10 @@ function AppController() {
           imagePath: m.image_url || null,
           feedback: m.feedback || null,
         })))
+        loadedConversationIdRef.current = newConversationId
+        if (location.pathname !== `/chat/${newConversationId}`) {
+          navigate(`/chat/${newConversationId}`, { replace: !conversationId })
+        }
       }
     } catch (err) {
       console.error(err)
@@ -1071,11 +1077,11 @@ function AppController() {
     classes,
     codeCooldown,
     conversationId,
+    conversationLoading,
     conversations,
     composerInputRef,
     dialRotation,
     expandedHomeworkId,
-    feedbackModal,
     generatingLearning,
     handleAddStudent,
     handleCopyMessage,
@@ -1085,12 +1091,10 @@ function AppController() {
     handleDownloadSubmission,
     handleExampleSelect,
     handleFeedback,
-    handleGenerateClassFeedback,
-    handleGenerateMyReport,
-    handleGenerateStudentReport,
     handleJoinClass,
     handleKeyDown,
     handleLogin,
+    handleMessagesScroll,
     handleMouseDown,
     handleSceneSelect,
     handleNewChat,
@@ -1107,7 +1111,6 @@ function AppController() {
     handleSubmitHomework,
     handleToggleSubmissions,
     handleUploadMaterial,
-    handleViewStudentReport,
     homeworkBusy,
     homeworkFile,
     homeworkForm,
@@ -1123,11 +1126,11 @@ function AppController() {
     language,
     materials,
     messages,
+    messagesListRef,
     messagesEndRef,
     openMaterialFile,
     pendingImage,
     quoteOpacity,
-    reportModal,
     roleModalOpen,
     secondPageTitle,
     setActiveClassId,
@@ -1139,8 +1142,6 @@ function AppController() {
     setHomeworkForm,
     setInput,
     setPendingImage,
-    setFeedbackModal,
-    setReportModal,
     setSidebarOpen,
     setStudentEmailInput,
     setStudentsOpen,
@@ -1185,6 +1186,9 @@ function AppController() {
           <Route path="/" element={<Navigate to="/chat" replace />} />
           <Route path="*" element={<Navigate to="/chat" replace />} />
           <Route path="/chat" element={(
+        <ChatPage model={viewModel} />
+          )} />
+          <Route path="/chat/:conversationId" element={(
         <ChatPage model={viewModel} />
           )} />
 

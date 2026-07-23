@@ -46,14 +46,30 @@
     padding: 140px 16px 40px;
   }
 
+  .resources-header {
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .student-class-context {
+    grid-template-columns: 1fr;
+  }
+
+  .student-class-context-actions {
+    justify-content: flex-start;
+  }
+
+  .resource-library-header {
+    align-items: flex-start;
+  }
+
   .scene-dial-wrap {
     display: none;
   }
 }
 
 @media (max-width: 700px) {
-  .auth-modal,
-  .report-modal {
+  .auth-modal {
     width: calc(100% - 24px);
     max-height: calc(100dvh - 24px);
     padding: 32px 24px;
@@ -121,6 +137,56 @@
 
   .welcome-flow {
     gap: 12px;
+  }
+
+  .resources-header,
+  .resource-library-header,
+  .student-join-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .student-class-context {
+    gap: var(--space-5);
+    padding: var(--space-5);
+  }
+
+  .student-class-context-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .student-class-picker {
+    min-width: 0;
+  }
+
+  .student-class-picker select,
+  .student-class-context-actions .action-btn,
+  .student-join-form .action-btn {
+    width: 100%;
+  }
+
+  .student-join-panel {
+    padding-top: var(--space-5);
+  }
+
+  .resource-library-header {
+    margin-top: 28px;
+  }
+
+  .resource-library-header .filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .resource-library-header .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .resources-grid {
+    grid-template-columns: 1fr;
   }
 
   .composer button[type="submit"] {

@@ -1,10 +1,8 @@
 import logoImg from '../../assets/logo.png'
 
 export default function AppModals({ model }) {
-  const { authError, authForm, authLoading, authModal, codeCooldown, feedbackModal, handleLogin, handleSelectRole, handleSendCode, handleSignup, isActionPending, reportModal, roleModalOpen, sendingCode, setAuthForm, setAuthModal, setFeedbackModal, setReportModal, t } = model
+  const { authError, authForm, authLoading, authModal, codeCooldown, handleLogin, handleSelectRole, handleSendCode, handleSignup, isActionPending, roleModalOpen, sendingCode, setAuthForm, setAuthModal, t } = model
   return <>
-    {reportModal && <div className="auth-overlay" onClick={() => setReportModal(null)}><div className="report-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" aria-label={t.auth.close} onClick={() => setReportModal(null)}>&times;</button><h2>{t.auth.reportTitle}{reportModal.student_name ? ` - ${reportModal.student_name}` : ''}</h2><div className="report-content">{reportModal.summary}</div></div></div>}
-    {feedbackModal && <div className="auth-overlay" onClick={() => setFeedbackModal(null)}><div className="report-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" aria-label={t.auth.close} onClick={() => setFeedbackModal(null)}>&times;</button><h2>{t.auth.feedbackTitle}</h2><div className="report-content">{feedbackModal.summary}</div></div></div>}
     {authModal && <div className="auth-overlay" onClick={() => setAuthModal(null)}><div className="auth-modal" onClick={(event) => event.stopPropagation()}>
       <button type="button" className="modal-close" aria-label={t.auth.close} onClick={() => setAuthModal(null)}>&times;</button>
       <div className="auth-header"><img src={logoImg} alt="Logo" className="logo-img" /><h2>{authModal === 'login' ? t.auth.loginTitle : t.auth.signupTitle}</h2></div>

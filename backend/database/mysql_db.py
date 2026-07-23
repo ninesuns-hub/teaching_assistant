@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker, relationship
 import enum
 import secrets
 import string
+import uuid
 from datetime import datetime
 from agent_core.config.settings import settings
 
@@ -149,6 +150,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, nullable=False, index=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     class_id = Column(Integer, ForeignKey("classes.id"), nullable=True, index=True)
     title = Column(String(200), nullable=False, default="新对话")
@@ -267,6 +269,32 @@ def _migrate_schema():
         try:
             conn.execute(text(
                 "ALTER TABLE chat_messages ADD COLUMN feedback_at DATETIME NULL AFTER feedback_type"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE conversations ADD COLUMN public_id VARCHAR(36) NULL AFTER id"
+            ))
+        except Exception:
+            pass
+        rows = conn.execute(text(
+            "SELECT id FROM conversations WHERE public_id IS NULL OR public_id = ''"
+        )).fetchall()
+        for row in rows:
+            conn.execute(
+                text("UPDATE conversations SET public_id = :public_id WHERE id = :id"),
+                {"public_id": str(uuid.uuid4()), "id": row[0]},
+            )
+        try:
+            conn.execute(text(
+                "CREATE UNIQUE INDEX ix_conversations_public_id ON conversations (public_id)"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE conversations MODIFY COLUMN public_id VARCHAR(36) NOT NULL"
             ))
         except Exception:
             pass

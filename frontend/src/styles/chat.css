@@ -434,7 +434,28 @@
   padding: 4px 0;
 }
 
-.mermaid-diagram,
+.mermaid-diagram {
+  max-width: 100%;
+  margin: 10px 0 14px;
+  overflow-x: auto;
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-2) 88%, transparent);
+  box-shadow:
+    var(--shadow-panel),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+}
+
+/* Fallback for renderers that retain ReactMarkdown's fenced-code wrapper. */
+.markdown-message pre:has(> .mermaid-diagram) {
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+}
+
 .mermaid-fallback {
   max-width: 100%;
   margin: 10px 0 14px;
@@ -563,6 +584,12 @@
 
 .welcome-card {
   background: var(--color-surface-2);
+}
+
+.messages-list.has-messages {
+  background: color-mix(in srgb, var(--color-surface-1) 96%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .example-prompt-card:hover:not(:disabled),

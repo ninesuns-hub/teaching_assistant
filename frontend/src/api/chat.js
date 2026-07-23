@@ -39,7 +39,7 @@ export async function sendChatMessage(payload, onChunk) {
     if (onChunk) onChunk(chunk)
   }
 
-  return conversationId ? Number(conversationId) : null
+  return conversationId || null
 }
 
 export async function sendWelcomeMessage(classId, onChunk) {
