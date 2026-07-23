@@ -62,7 +62,21 @@
   font-weight: 500;
   letter-spacing: 0.06em;
   opacity: 1;
-  transition: opacity 0.25s ease;
+  transition: color var(--duration-fast) ease;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 2px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 
 .nav-link + .nav-link {
@@ -89,6 +103,10 @@
   color: var(--color-text-primary);
   background: transparent;
   font-weight: 600;
+}
+
+.nav-link.active::after {
+  transform: scaleX(1);
 }
 
 .nav-link-more {
@@ -308,8 +326,8 @@
   left: 0;
   top: 50%;
   z-index: 500;
-  width: 56px;
-  height: 132px;
+  width: 60px;
+  height: 136px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -365,8 +383,8 @@
 
 .sidebar-tab-label {
   writing-mode: vertical-rl;
-  font-size: var(--font-size-caption);
-  letter-spacing: 3px;
+  font-size: var(--font-size-control);
+  letter-spacing: 2px;
   color: var(--color-text-meta);
   opacity: 1;
   white-space: nowrap;
@@ -412,7 +430,7 @@
 
 .sidebar-header h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--font-size-subheading);
   font-weight: 600;
   opacity: 0.9;
 }

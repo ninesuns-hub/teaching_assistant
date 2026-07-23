@@ -29,7 +29,7 @@ export default function ChatPage({ model }) {
           <div className="welcome-flow">
             <div className="welcome-card">
               {welcomeContent ? (
-                <MarkdownMessage content={welcomeContent} />
+                <MarkdownMessage content={welcomeContent} scene={activeSceneKey} />
               ) : welcomeLoading ? (
                 <div className="thinking-indicator" aria-live="polite">
                   <span />
@@ -73,7 +73,7 @@ export default function ChatPage({ model }) {
                       <AuthImage path={message.imagePath} previewUrl={message.imagePreview} />
                     )}
                     {message.content && message.content !== '[图片]' && message.content !== '[Image]' && (
-                      message.role === 'assistant' ? <MarkdownMessage content={message.content} /> : <p className="message-text">{message.content}</p>
+                      message.role === 'assistant' ? <MarkdownMessage content={message.content} scene={activeSceneKey} /> : <p className="message-text">{message.content}</p>
                     )}
                     {message.content && (message.content === '[图片]' || message.content === '[Image]') && !(message.imagePreview || message.imagePath) && (
                       <p className="message-text">{message.content}</p>
