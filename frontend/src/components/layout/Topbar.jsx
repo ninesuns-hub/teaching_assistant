@@ -9,6 +9,7 @@ export default function Topbar({
   settingsOpen,
   setLanguage,
   setSettingsOpen,
+  chatDestination,
   onNavigate,
   onLogout,
   onOpenAuth,
@@ -24,7 +25,7 @@ export default function Topbar({
           <span className="brand-text">{t.brand}</span>
         </div>
         <nav className="topbar-nav" aria-label="Primary">
-          <NavLink className={navClass} to="/chat" onClick={() => onNavigate('chat')}>
+          <NavLink className={navClass} to={chatDestination} onClick={() => onNavigate('chat')}>
             {t.navChat}
           </NavLink>
           {user && (

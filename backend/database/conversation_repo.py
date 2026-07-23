@@ -53,6 +53,22 @@ def delete_conversation(db: Session, public_id: str, user_id: int) -> bool:
     return True
 
 
+def rename_conversation(db: Session, public_id: str, user_id: int, title: str) -> Optional[Conversation]:
+    conversation = get_conversation(db, public_id, user_id)
+    if not conversation:
+        return None
+    db.query(Conversation).filter(Conversation.id == conversation.id).update(
+        {
+            Conversation.title: title,
+            Conversation.updated_at: conversation.updated_at,
+        },
+        synchronize_session=False,
+    )
+    db.commit()
+    db.refresh(conversation)
+    return conversation
+
+
 def add_message(
     db: Session,
     conversation_id: int,

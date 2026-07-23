@@ -36,6 +36,7 @@ export default function ResourcesPage({ model }) {
     isTeacher,
     language,
     materials,
+    materialUploadNotice,
     openMaterialFile,
     secondPageTitle,
     setActiveClassId,
@@ -167,6 +168,7 @@ export default function ResourcesPage({ model }) {
                       type="button"
                       className={`filter-btn ${activeClassId === classroom.id ? 'active' : ''}`}
                       aria-pressed={activeClassId === classroom.id}
+                      disabled={isActionPending('material:upload')}
                       onClick={() => {
                         setActiveClassId(classroom.id)
                         setStudentsOpen(false)
@@ -180,12 +182,6 @@ export default function ResourcesPage({ model }) {
                   <p className="invite-code-display">
                     {t.auth.inviteCodeLabel}: <strong>{classes.find(classroom => classroom.id === activeClassId)?.invite_code}</strong>
                   </p>
-                )}
-                {activeClassId && (
-                  <label className="upload-btn" aria-busy={isActionPending('material:upload')}>
-                    {isActionPending('material:upload') ? t.auth.uploading : t.auth.uploadMaterial}
-                    <input className="visually-hidden-file-input" type="file" accept=".pdf,.pptx,.ppsx" disabled={isActionPending('material:upload')} onChange={handleUploadMaterial} />
-                  </label>
                 )}
                 {activeClassId && (
                   <div className="student-management-panel">
@@ -247,12 +243,27 @@ export default function ResourcesPage({ model }) {
                 <h3>{t.auth.resourceLibrary}</h3>
                 {isStudent && <p>{classes.find(classroom => classroom.id === activeClassId)?.name}</p>}
               </div>
-              <ResourceFilters activeFilter={activeFilter} setActiveFilter={setActiveFilter} t={t} />
+              <div className="resource-library-tools">
+                <ResourceFilters activeFilter={activeFilter} setActiveFilter={setActiveFilter} t={t} />
+                {isTeacher && activeClassId && (
+                  <label className="upload-btn upload-btn-primary" aria-busy={isActionPending('material:upload')}>
+                    {isActionPending('material:upload') && materialUploadNotice?.filename
+                      ? `${t.auth.uploading} ${materialUploadNotice.filename}`
+                      : t.auth.uploadMaterial}
+                    <input className="visually-hidden-file-input" type="file" accept=".pdf,.pptx,.ppsx" disabled={isActionPending('material:upload')} onChange={handleUploadMaterial} />
+                  </label>
+                )}
+              </div>
             </div>
+            {materialUploadNotice?.classId === activeClassId && materialUploadNotice.type !== 'progress' && (
+              <div className={`material-upload-notice is-${materialUploadNotice.type}`} role={materialUploadNotice.type === 'error' ? 'alert' : 'status'}>
+                {materialUploadNotice.message}
+              </div>
+            )}
             <div className="resources-grid">
               {visibleMaterials.length === 0 ? (
                 <div className="resource-card muted-card">
-                  <p className="muted">{materials.length === 0 ? t.auth.noClasses : (language === 'zh' ? '该分类下暂无资料' : 'No resources in this category')}</p>
+                  <p className="muted">{materials.length === 0 ? t.auth.noMaterials : (language === 'zh' ? '该分类下暂无资料' : 'No resources in this category')}</p>
                 </div>
               ) : visibleMaterials.map(material => (
                 <div key={material.id} className="resource-card">

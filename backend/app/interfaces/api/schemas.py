@@ -121,6 +121,20 @@ class ConversationResponse(BaseModel):
     updated_at: str
 
 
+class RenameConversationRequest(BaseModel):
+    title: str
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        title = value.strip()
+        if not title:
+            raise ValueError("会话标题不能为空")
+        if len(title) > 50:
+            raise ValueError("会话标题不能超过 50 个字符")
+        return title
+
+
 class ChatMessageResponse(BaseModel):
     id: int
     role: str

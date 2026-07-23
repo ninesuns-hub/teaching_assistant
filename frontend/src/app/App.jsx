@@ -3,7 +3,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'r
 import { sendChatMessage, sendWelcomeMessage } from '../api/chat'
 import { sendCode, register, login, selectRole } from '../api/auth'
 import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, fetchMaterialFile, fetchMaterialPreview } from '../api/classes'
-import { fetchConversations, fetchConversationMessages, deleteConversation, submitConversationFeedback } from '../api/conversations'
+import { fetchConversations, fetchConversationMessages, deleteConversation, renameConversation, submitConversationFeedback } from '../api/conversations'
 import {
   fetchClassStudents,
   addClassStudent,
@@ -40,6 +40,54 @@ const SCENE_OPTIONS = [
   { key: 'sunset', label: { en: 'Sunset', zh: '落日余晖' }, angle: 240 },
 ]
 
+const CHAT_PATH_PATTERN = /^\/chat(?:\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}))?$/
+const LAST_CHAT_PATH_PREFIX = 'assistant-agent:last-chat:'
+const WELCOME_CACHE_PREFIX = 'assistant-agent:welcome:'
+
+function normalizeChatPath(path) {
+  const match = CHAT_PATH_PATTERN.exec(path || '')
+  if (!match) return '/chat'
+  return match[1] ? `/chat/${match[1].toLowerCase()}` : '/chat'
+}
+
+function getUserStorageKey(user) {
+  return user?.email ? encodeURIComponent(user.email.toLowerCase()) : 'guest'
+}
+
+function readLastChatPath(user) {
+  try {
+    return normalizeChatPath(sessionStorage.getItem(`${LAST_CHAT_PATH_PREFIX}${getUserStorageKey(user)}`))
+  } catch {
+    return '/chat'
+  }
+}
+
+function readWelcomeCache(key) {
+  try {
+    return sessionStorage.getItem(`${WELCOME_CACHE_PREFIX}${encodeURIComponent(key)}`) || ''
+  } catch {
+    return ''
+  }
+}
+
+function writeWelcomeCache(key, content) {
+  try {
+    sessionStorage.setItem(`${WELCOME_CACHE_PREFIX}${encodeURIComponent(key)}`, content)
+  } catch {
+    // Session storage can be unavailable in privacy-restricted environments.
+  }
+}
+
+function clearWelcomeSessionCache() {
+  try {
+    Object.keys(sessionStorage)
+      .filter(key => key.startsWith(WELCOME_CACHE_PREFIX))
+      .forEach(key => sessionStorage.removeItem(key))
+  } catch {
+    // Keep in-memory behavior when session storage is unavailable.
+  }
+}
+
 function AppController() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -52,6 +100,7 @@ function AppController() {
   const [authModal, setAuthModal] = useState(null) // null, 'login', 'signup'
   const [roleModalOpen, setRoleModalOpen] = useState(false)
   const [user, setUser] = useState(() => getStoredUser())
+  const [lastChatPath, setLastChatPath] = useState(() => readLastChatPath(getStoredUser()))
   const [authForm, setAuthForm] = useState({ email: '', code: '', name: '', password: '', confirmPassword: '' })
   const [authError, setAuthError] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
@@ -60,6 +109,7 @@ function AppController() {
   const [classes, setClasses] = useState([])
   const [activeClassId, setActiveClassId] = useState(null)
   const [materials, setMaterials] = useState([])
+  const [materialUploadNotice, setMaterialUploadNotice] = useState(null)
   const [homeworks, setHomeworks] = useState([])
   const [homeworkForm, setHomeworkForm] = useState({ title: '', description: '', dueAt: '' })
   const [homeworkFile, setHomeworkFile] = useState(null)
@@ -84,7 +134,8 @@ function AppController() {
   const [learningDrawer, setLearningDrawer] = useState(null)
   const [pendingImage, setPendingImage] = useState(null)
   const imageInputRef = useRef(null)
-  const welcomeRequestRef = useRef(null)
+  const welcomeRequestRef = useRef({ key: null, controller: null })
+  const welcomeCacheRef = useRef(new Map())
   const conversationRequestRef = useRef(0)
   const loadedConversationIdRef = useRef(null)
   const [language, setLanguage] = useState('zh')
@@ -100,6 +151,9 @@ function AppController() {
   const scrollFrameRef = useRef(null)
   const composerInputRef = useRef(null)
   const pendingActionsRef = useRef(new Set())
+  const materialsRequestRef = useRef(0)
+  const activeClassIdRef = useRef(null)
+  const uploadNoticeTimerRef = useRef(null)
   const [pendingActions, setPendingActions] = useState({})
 
   const isActionPending = useCallback(
@@ -174,12 +228,14 @@ function AppController() {
 
   const loadMaterials = useCallback(async (classId) => {
     if (!classId) return
+    const requestId = materialsRequestRef.current + 1
+    materialsRequestRef.current = requestId
     try {
       const data = await fetchClassMaterials(classId)
-      setMaterials(data)
+      if (materialsRequestRef.current === requestId) setMaterials(data)
     } catch (err) {
       console.error(err)
-      setMaterials([])
+      if (materialsRequestRef.current === requestId) setMaterials([])
     }
   }, [])
 
@@ -199,6 +255,7 @@ function AppController() {
   }, [user?.role, loadClasses])
 
   useEffect(() => {
+    activeClassIdRef.current = activeClassId
     if (activeClassId) {
       loadMaterials(activeClassId)
       loadHomeworks(activeClassId)
@@ -208,12 +265,27 @@ function AppController() {
     }
   }, [activeClassId, loadMaterials, loadHomeworks])
 
+  useEffect(() => () => {
+    if (uploadNoticeTimerRef.current) clearTimeout(uploadNoticeTimerRef.current)
+  }, [])
+
+  const rememberChatPath = useCallback((path, targetUser = user) => {
+    const normalizedPath = normalizeChatPath(path)
+    setLastChatPath(normalizedPath)
+    try {
+      sessionStorage.setItem(`${LAST_CHAT_PATH_PREFIX}${getUserStorageKey(targetUser)}`, normalizedPath)
+    } catch {
+      // The in-memory path remains available when storage is unavailable.
+    }
+    return normalizedPath
+  }, [user])
+
   const handleSectionChange = useCallback((target) => {
-    navigate(`/${target}`)
+    navigate(target === 'chat' ? lastChatPath : `/${target}`)
     setSidebarOpen(false)
     setSettingsOpen(false)
     setLearningAssistantOpen(false)
-  }, [navigate])
+  }, [lastChatPath, navigate])
 
   const loadConversations = useCallback(async () => {
     if (!user?.role) return []
@@ -228,22 +300,30 @@ function AppController() {
     }
   }, [user?.role])
 
-  const resetConversationState = useCallback(() => {
+  const clearWelcomeState = useCallback(() => {
+    welcomeRequestRef.current.controller?.abort()
+    welcomeRequestRef.current = { key: null, controller: null }
+    welcomeCacheRef.current.clear()
+    clearWelcomeSessionCache()
+    setWelcomeContent('')
+    setWelcomeLoading(false)
+  }, [])
+
+  const resetConversationState = useCallback(({ clearWelcome = false } = {}) => {
     conversationRequestRef.current += 1
     loadedConversationIdRef.current = null
     shouldAutoScrollRef.current = true
     setConversationLoading(false)
     setConversationId(null)
     setMessages([])
-    welcomeRequestRef.current = null
-    setWelcomeContent('')
-    setWelcomeLoading(false)
     setExampleGroupIndex(0)
-  }, [])
+    if (clearWelcome) clearWelcomeState()
+  }, [clearWelcomeState])
 
   const selectConversation = useCallback(async (id) => {
     const requestId = conversationRequestRef.current + 1
     conversationRequestRef.current = requestId
+    loadedConversationIdRef.current = id
     shouldAutoScrollRef.current = true
     setConversationLoading(true)
     setConversationId(id)
@@ -330,10 +410,17 @@ function AppController() {
   }, [user?.role, loadConversations])
 
   useEffect(() => {
+    setLastChatPath(readLastChatPath(user))
+  }, [user])
+
+  useEffect(() => {
     if (!location.pathname.startsWith('/chat')) return
 
     if (location.pathname === '/chat') {
-      resetConversationState()
+      rememberChatPath('/chat')
+      if (loadedConversationIdRef.current) {
+        resetConversationState()
+      }
       return
     }
 
@@ -342,43 +429,71 @@ function AppController() {
     const isPublicConversationId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(routeId)
     if (!isPublicConversationId) {
       resetConversationState()
+      rememberChatPath('/chat')
       navigate('/chat', { replace: true })
       return
     }
 
+    rememberChatPath(`/chat/${routeId}`)
     if (!user?.role) return
     if (loadedConversationIdRef.current === routeId) {
       setConversationId(routeId)
       return
     }
     selectConversation(routeId)
-  }, [location.pathname, navigate, resetConversationState, selectConversation, user?.role])
+  }, [location.pathname, navigate, rememberChatPath, resetConversationState, selectConversation, user?.role])
+
+  const shouldPrepareWelcome = location.pathname === '/chat'
+    || (!location.pathname.startsWith('/chat') && lastChatPath === '/chat')
 
   useEffect(() => {
-    if (activeSection !== 'chat' || conversationLoading || !canChat || conversationId || messages.length > 0) return
-    const key = `${user?.email || 'user'}:${user?.role || 'none'}:${activeClassId || 'none'}`
-    if (welcomeRequestRef.current === key) return
+    if (!shouldPrepareWelcome || conversationLoading || !canChat || conversationId || messages.length > 0) return undefined
 
-    let cancelled = false
-    welcomeRequestRef.current = key
+    const key = `${user?.email || 'user'}:${user?.role || 'none'}:${activeClassId || 'none'}:${language}`
+    const cachedContent = welcomeCacheRef.current.get(key) || readWelcomeCache(key)
+    if (cachedContent) {
+      welcomeCacheRef.current.set(key, cachedContent)
+      setWelcomeContent(cachedContent)
+      setWelcomeLoading(false)
+      return undefined
+    }
+    if (welcomeRequestRef.current.key === key) return undefined
+
+    welcomeRequestRef.current.controller?.abort()
+    const controller = new AbortController()
+    welcomeRequestRef.current = { key, controller }
+    let accumulatedContent = ''
     setWelcomeContent('')
     setWelcomeLoading(true)
 
     sendWelcomeMessage(activeClassId, (chunk) => {
-      if (!cancelled) setWelcomeContent(prev => prev + chunk)
-    })
+      if (controller.signal.aborted) return
+      accumulatedContent += chunk
+      setWelcomeContent(accumulatedContent)
+    }, controller.signal)
       .catch((err) => {
-        console.error(err)
-        if (!cancelled) setWelcomeContent('')
+        if (err.name !== 'AbortError') {
+          console.error(err)
+          setWelcomeContent('')
+        }
       })
       .finally(() => {
-        if (!cancelled) setWelcomeLoading(false)
+        if (welcomeRequestRef.current.controller !== controller) return
+        if (!controller.signal.aborted && accumulatedContent) {
+          welcomeCacheRef.current.set(key, accumulatedContent)
+          writeWelcomeCache(key, accumulatedContent)
+        }
+        welcomeRequestRef.current = { key: null, controller: null }
+        setWelcomeLoading(false)
       })
 
     return () => {
-      cancelled = true
+      if (welcomeRequestRef.current.controller === controller) {
+        controller.abort()
+        welcomeRequestRef.current = { key: null, controller: null }
+      }
     }
-  }, [activeSection, canChat, conversationId, conversationLoading, messages.length, activeClassId, user?.email, user?.role])
+  }, [activeClassId, canChat, conversationId, conversationLoading, language, messages.length, shouldPrepareWelcome, user?.email, user?.role])
 
   useEffect(() => {
     if (activeClassId && isTeacher) loadStudents(activeClassId)
@@ -413,7 +528,8 @@ function AppController() {
     }
     setAuth(data.access_token, nextUser)
     setUser(nextUser)
-    resetConversationState()
+    resetConversationState({ clearWelcome: true })
+    rememberChatPath('/chat', nextUser)
     navigate('/chat', { replace: true })
     setAuthModal(null)
     if (data.needs_role_selection) setRoleModalOpen(true)
@@ -497,7 +613,8 @@ function AppController() {
       const nextUser = { ...user, role: data.role, needs_role_selection: false }
       setAuth(data.access_token, nextUser)
       setUser(nextUser)
-      resetConversationState()
+      resetConversationState({ clearWelcome: true })
+      rememberChatPath('/chat', nextUser)
       navigate('/chat', { replace: true })
       setRoleModalOpen(false)
     } catch (err) {
@@ -512,9 +629,11 @@ function AppController() {
     clearAuth()
     navigate('/chat', { replace: true })
     setUser(null)
-    resetConversationState()
+    resetConversationState({ clearWelcome: true })
+    rememberChatPath('/chat', null)
     setClasses([])
     setMaterials([])
+    setMaterialUploadNotice(null)
     setHomeworks([])
     setHomeworkForm({ title: '', description: '', dueAt: '' })
     setHomeworkFile(null)
@@ -529,13 +648,17 @@ function AppController() {
   }
 
   const handleNewChat = () => {
-    resetConversationState()
+    if (location.pathname !== '/chat' || loadedConversationIdRef.current) {
+      resetConversationState()
+    }
+    rememberChatPath('/chat')
     navigate('/chat')
     setSidebarOpen(false)
   }
 
   const handleSelectConversation = (id) => {
-    navigate(`/chat/${id}`)
+    const path = rememberChatPath(`/chat/${id}`)
+    navigate(path)
     setSidebarOpen(false)
   }
 
@@ -547,11 +670,22 @@ function AppController() {
       setConversations(prev => prev.filter(c => c.id !== id))
       if (conversationId === id) {
         resetConversationState()
+        rememberChatPath('/chat')
         navigate('/chat', { replace: true })
       }
     } catch (err) {
       alert(err.message || (language === 'zh' ? '删除失败' : 'Delete failed'))
     }
+  }
+
+  const handleRenameConversation = async (id, title) => {
+    return runPendingAction(`conversation:rename:${id}`, async () => {
+      const updatedConversation = await renameConversation(id, title)
+      setConversations(current => current.map(conversation => (
+        conversation.id === id ? { ...conversation, title: updatedConversation.title } : conversation
+      )))
+      return updatedConversation
+    })
   }
 
   const handleLearningAssistantToggle = () => {
@@ -673,12 +807,37 @@ function AppController() {
   const handleUploadMaterial = async (e) => {
     const file = e.target.files?.[0]
     if (!file || !activeClassId) return
+    const targetClassId = activeClassId
+    if (uploadNoticeTimerRef.current) {
+      clearTimeout(uploadNoticeTimerRef.current)
+      uploadNoticeTimerRef.current = null
+    }
+    setMaterialUploadNotice({ type: 'progress', classId: targetClassId, filename: file.name })
     return runPendingAction('material:upload', async () => {
       try {
-        await uploadClassMaterial(activeClassId, file)
-        loadMaterials(activeClassId)
+        const result = await uploadClassMaterial(targetClassId, file)
+        if (activeClassIdRef.current === targetClassId && result.material) {
+          setMaterials(current => [
+            result.material,
+            ...current.filter(material => material.id !== result.material.id),
+          ])
+        }
+        setMaterialUploadNotice({
+          type: 'success',
+          classId: targetClassId,
+          filename: file.name,
+          message: `${file.name} ${t.auth.uploadSuccess}`,
+        })
+        if (uploadNoticeTimerRef.current) clearTimeout(uploadNoticeTimerRef.current)
+        uploadNoticeTimerRef.current = setTimeout(() => setMaterialUploadNotice(null), 4000)
+        loadMaterials(targetClassId)
       } catch (err) {
-        alert(err.message)
+        setMaterialUploadNotice({
+          type: 'error',
+          classId: targetClassId,
+          filename: file.name,
+          message: err.message,
+        })
       } finally {
         e.target.value = ''
       }
@@ -1032,6 +1191,7 @@ function AppController() {
           feedback: m.feedback || null,
         })))
         loadedConversationIdRef.current = newConversationId
+        rememberChatPath(`/chat/${newConversationId}`)
         if (location.pathname !== `/chat/${newConversationId}`) {
           navigate(`/chat/${newConversationId}`, { replace: !conversationId })
         }
@@ -1101,6 +1261,7 @@ function AppController() {
     handlePickImage,
     handlePublishHomework,
     handleRefreshExamples,
+    handleRenameConversation,
     handleRemoveStudent,
     handleDeleteConversation,
     handleSelectConversation,
@@ -1125,6 +1286,7 @@ function AppController() {
     isTeacher,
     language,
     materials,
+    materialUploadNotice,
     messages,
     messagesListRef,
     messagesEndRef,
@@ -1177,6 +1339,7 @@ function AppController() {
           settingsOpen={settingsOpen}
           setLanguage={setLanguage}
           setSettingsOpen={setSettingsOpen}
+          chatDestination={lastChatPath}
           onNavigate={handleSectionChange}
           onLogout={handleLogout}
           onOpenAuth={setAuthModal}

@@ -63,6 +63,11 @@
     align-items: flex-start;
   }
 
+  .resource-library-tools {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+  }
+
   .scene-dial-wrap {
     display: none;
   }
@@ -144,6 +149,15 @@
   .student-join-form {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .resource-library-tools {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .resource-library-tools .upload-btn {
+    width: 100%;
   }
 
   .student-class-context {

@@ -189,6 +189,31 @@
   font-size: var(--font-size-meta);
 }
 
+.resource-library-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.material-upload-notice {
+  margin: -10px 0 var(--space-4);
+  padding: 10px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-meta);
+}
+
+.material-upload-notice.is-success {
+  border-color: color-mix(in srgb, var(--color-status-done) 55%, var(--color-border-subtle));
+}
+
+.material-upload-notice.is-error {
+  border-color: color-mix(in srgb, var(--color-status-pending) 60%, var(--color-border-subtle));
+}
+
 .filter-bar {
   display: flex;
   gap: 12px;
@@ -670,6 +695,16 @@
   font-size: var(--font-size-control);
 }
 
+.upload-btn.upload-btn-primary {
+  min-height: 44px;
+  margin-top: 0;
+  border: 1px solid transparent;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .invite-code-display {
   margin: 8px 0;
   font-size: var(--font-size-meta);
@@ -752,6 +787,12 @@
 .upload-btn:hover:not(:has(input:disabled)) {
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
+}
+
+.upload-btn-primary:hover:not(:has(input:disabled)) {
+  border-color: var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-accent) 88%, var(--color-text-primary));
+  color: var(--color-accent-contrast);
 }
 
 .download-btn:disabled,

@@ -7,7 +7,7 @@ from database.mysql_db import get_db, User
 from database import conversation_repo
 from app.core.deps import get_current_user
 from app.core.chat_image_store import image_url_for_path
-from .schemas import ConversationResponse, ChatMessageResponse, ChatRequest, MessageFeedbackRequest
+from .schemas import ConversationResponse, ChatMessageResponse, ChatRequest, MessageFeedbackRequest, RenameConversationRequest
 
 router = APIRouter()
 
@@ -89,6 +89,25 @@ def set_message_feedback(
         raise HTTPException(status_code=404, detail="没有可反馈的助手消息")
 
     return {"ok": True, "feedback_type": message.feedback_type}
+
+
+@router.patch("/{public_id}", response_model=ConversationResponse)
+def rename_conversation(
+    public_id: str,
+    payload: RenameConversationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    conversation = conversation_repo.rename_conversation(db, public_id, current_user.id, payload.title)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return ConversationResponse(
+        id=conversation.public_id,
+        title=conversation.title,
+        class_id=conversation.class_id,
+        created_at=conversation.created_at.isoformat(),
+        updated_at=conversation.updated_at.isoformat() if conversation.updated_at else conversation.created_at.isoformat(),
+    )
 
 
 @router.delete("/{public_id}")

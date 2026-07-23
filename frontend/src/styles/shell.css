@@ -525,7 +525,15 @@
   word-break: break-word;
 }
 
-.sidebar-delete-btn {
+.sidebar-item-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sidebar-item-action {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
@@ -534,19 +542,23 @@
   border: none;
   border-radius: var(--radius-control);
   background: transparent;
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--color-text-meta);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s, color 0.2s, background 0.2s;
+  transition: color 0.2s, background 0.2s;
 }
 
-.sidebar-item:hover .sidebar-delete-btn,
-.sidebar-item:focus-within .sidebar-delete-btn,
-.sidebar-item.active .sidebar-delete-btn {
+.sidebar-item:hover .sidebar-item-actions,
+.sidebar-item:focus-within .sidebar-item-actions,
+.sidebar-item.active .sidebar-item-actions {
   opacity: 1;
+}
+
+.sidebar-rename-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
 }
 
 .sidebar-delete-btn:hover {
@@ -554,12 +566,66 @@
   color: rgba(255, 200, 180, 0.9);
 }
 
-.sidebar-delete-btn:focus-visible {
-  opacity: 1;
+.sidebar-item-action:focus-visible {
   outline: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-.sidebar-delete-btn svg {
+.sidebar-item.is-editing {
+  cursor: default;
+}
+
+.sidebar-rename-form {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.sidebar-rename-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-control);
+  outline: none;
+}
+
+.sidebar-rename-form input:focus-visible {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 20%, transparent);
+}
+
+.sidebar-rename-error {
+  color: color-mix(in srgb, var(--color-status-pending) 80%, var(--color-text-primary));
+  font-size: var(--font-size-caption);
+}
+
+.sidebar-rename-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.sidebar-rename-actions button {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-caption);
+}
+
+.sidebar-rename-actions button[type="submit"] {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.sidebar-item-action svg {
   width: 15px;
   height: 15px;
 }
