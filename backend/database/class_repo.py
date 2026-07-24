@@ -185,6 +185,7 @@ def add_material(
     file_type: str,
     file_size: int,
     uploader_id: int,
+    content_hash: str | None = None,
 ) -> ClassMaterial:
     material = ClassMaterial(
         class_id=class_id,
@@ -192,6 +193,7 @@ def add_material(
         file_path=file_path,
         file_type=file_type,
         file_size=file_size,
+        content_hash=content_hash,
         uploaded_by=uploader_id,
     )
     db.add(material)

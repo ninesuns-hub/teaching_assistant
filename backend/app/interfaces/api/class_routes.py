@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from pptx import Presentation
 from agent_core.config.settings import settings
 from database.mysql_db import get_db, User, UserRole
-from database import class_repo
+from database import class_repo, rag_repo
 from app.core.deps import get_current_user, require_role
 from .schemas import CreateClassRequest, JoinClassRequest, ClassResponse, MaterialResponse
 
@@ -127,6 +127,7 @@ def list_class_materials(
             file_type=m.file_type,
             file_size=m.file_size,
             uploaded_at=m.uploaded_at.isoformat(),
+            content_hash=m.content_hash,
         )
         for m in materials
     ]
@@ -158,6 +159,7 @@ async def upload_class_material(
         raise HTTPException(status_code=400, detail="仅支持 PDF、PPTX、PPSX 文件")
 
     content = await file.read()
+    content_hash = data_manager.calculate_content_hash(content)
     result = data_manager.save_class_material(
         content, filename, class_id, auto_ingest=False
     )
@@ -165,6 +167,7 @@ async def upload_class_material(
         raise HTTPException(status_code=500, detail=result.get("message", "上传失败"))
 
     file_type = "pdf" if ext.endswith(".pdf") else "pptx"
+    document = source = None
     try:
         material = class_repo.add_material(
             db,
@@ -174,23 +177,66 @@ async def upload_class_material(
             file_type=file_type,
             file_size=len(content),
             uploader_id=current_user.id,
+            content_hash=content_hash,
         )
-        data_manager.ingest_file(
-            result["path"],
-            metadata={
-                "class_id": class_id,
-                "material_id": material.id,
-                "source_key": f"class:{class_id}:material:{material.id}",
-            },
+        document, _ = rag_repo.get_or_create_document(
+            db,
+            content_hash=content_hash,
+            file_type=file_type,
+            file_size=len(content),
         )
+        source = rag_repo.add_source(
+            db,
+            document_id=document.id,
+            scope_type="class",
+            class_id=class_id,
+            material_id=material.id,
+            filename=filename,
+            file_path=result["path"],
+        )
+        sources = rag_repo.list_sources(db, document.id)
+        serialized_sources = rag_repo.serialize_sources(sources)
+        scope_keys = rag_repo.scope_keys(sources)
+        index_reused = document.index_status == "ready"
+        if index_reused:
+            data_manager.update_document_access(
+                content_hash,
+                scope_keys,
+                serialized_sources,
+            )
+        else:
+            indexed = data_manager.ingest_file(
+                result["path"],
+                metadata={
+                    "document_hash": content_hash,
+                    "scope_keys": scope_keys,
+                    "sources": serialized_sources,
+                    "source_key": f"document:{content_hash}",
+                },
+            )
+            if not indexed:
+                raise RuntimeError("资料中没有可建立索引的文本内容")
+            rag_repo.set_document_status(db, document, "ready")
     except Exception as exc:
+        if source is not None:
+            rag_repo.remove_source(db, source)
+        if document is not None:
+            remaining_sources = rag_repo.list_sources(db, document.id)
+            if not remaining_sources:
+                data_manager.delete_document_index(content_hash)
+                rag_repo.delete_document(db, document)
         if "material" in locals():
             class_repo.delete_material(db, material)
         if os.path.isfile(result["path"]):
             os.remove(result["path"])
         raise HTTPException(status_code=500, detail=f"资料入库失败: {exc}") from exc
     return {
-        "message": f"文件 {filename} 上传成功",
+        "message": (
+            f"文件 {filename} 已添加到班级，已复用现有内容索引"
+            if index_reused
+            else f"文件 {filename} 上传并入库成功"
+        ),
+        "index_reused": index_reused,
         "material": MaterialResponse(
             id=material.id,
             class_id=material.class_id,
@@ -198,6 +244,7 @@ async def upload_class_material(
             file_type=material.file_type,
             file_size=material.file_size,
             uploaded_at=material.uploaded_at.isoformat(),
+            content_hash=material.content_hash,
         ),
     }
 
@@ -218,7 +265,23 @@ def delete_class_material(
         raise HTTPException(status_code=404, detail="资料不存在")
 
     try:
-        data_manager.delete_class_material_index(class_id, material_id)
+        source = rag_repo.get_material_source(db, material_id)
+        if source:
+            document = source.document
+            content_hash = document.content_hash
+            rag_repo.remove_source(db, source)
+            remaining_sources = rag_repo.list_sources(db, document.id)
+            if remaining_sources:
+                data_manager.update_document_access(
+                    content_hash,
+                    rag_repo.scope_keys(remaining_sources),
+                    rag_repo.serialize_sources(remaining_sources),
+                )
+            else:
+                data_manager.delete_document_index(content_hash)
+                rag_repo.delete_document(db, document)
+        else:
+            data_manager.delete_class_material_index(class_id, material_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"清理资料索引失败: {exc}") from exc
 

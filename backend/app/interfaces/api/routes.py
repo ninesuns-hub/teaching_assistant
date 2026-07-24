@@ -13,10 +13,9 @@ from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from .schemas import ChatRequest
 from agent_core import ReactAgent
-from agent_core.rag import HybridSearcher
 from database.course_repo import query_course_admin, init_db
 from database.mysql_db import get_db, User, UserRole
-from database import conversation_repo
+from database import conversation_repo, rag_repo
 from agent_core.config.settings import settings
 from app.core.data_manager import data_manager
 from app.core.chat_image_store import save_chat_image, resolve_image_path
@@ -28,7 +27,7 @@ from .conversation_routes import router as conversation_router
 from .learning_routes import router as learning_router
 from .homework_routes import router as homework_router
 
-hybrid_searcher = HybridSearcher()
+hybrid_searcher = data_manager.searcher
 
 router = APIRouter()
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
@@ -157,20 +156,33 @@ def chat(
     if current_user.role is None:
         raise HTTPException(status_code=400, detail="请先选择学生或教师身份")
 
+    from database import class_repo
+
     conversation = None
+    resolved_class_id = None
     if request.conversation_id:
         conversation = conversation_repo.get_conversation(db, request.conversation_id, current_user.id)
         if not conversation:
             raise HTTPException(status_code=404, detail="会话不存在")
+        resolved_class_id = conversation.class_id
 
     if not conversation:
-        class_id = request.class_id
-        if class_id is None and current_user.role == UserRole.STUDENT:
-            from database import class_repo
+        resolved_class_id = request.class_id
+        if resolved_class_id is not None and not class_repo.user_can_access_class(
+            db, current_user, resolved_class_id
+        ):
+            raise HTTPException(status_code=403, detail="无权使用该班级知识库")
+        if resolved_class_id is None and current_user.role == UserRole.STUDENT:
             user_classes = class_repo.get_user_classes(db, current_user)
             if user_classes:
-                class_id = user_classes[0]["id"]
-        conversation = conversation_repo.create_conversation(db, current_user.id, class_id)
+                resolved_class_id = user_classes[0]["id"]
+        conversation = conversation_repo.create_conversation(
+            db, current_user.id, resolved_class_id
+        )
+    elif resolved_class_id is not None and not class_repo.user_can_access_class(
+        db, current_user, resolved_class_id
+    ):
+        raise HTTPException(status_code=403, detail="无权使用该班级知识库")
 
     image_path = None
     if request.image_base64:
@@ -184,7 +196,13 @@ def chat(
             raise HTTPException(status_code=400, detail=str(e))
 
     display_message = request.message.strip() or "[图片]"
-    request_context = {"image_path": image_path} if image_path else {}
+    request_context = {
+        "user_id": current_user.id,
+        "user_role": current_user.role.value,
+        "class_id": resolved_class_id,
+    }
+    if image_path:
+        request_context["image_path"] = image_path
     agent_input = _build_agent_input(request.message, image_path)
 
     try:
@@ -272,13 +290,66 @@ def reset(current_user: User = Depends(get_current_user)):
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(require_role(UserRole.TEACHER)),
+    db: Session = Depends(get_db),
 ):
     """兼容旧接口：上传到全局课程目录（建议改用班级资料上传）"""
     content = await file.read()
-    result = data_manager.save_course_file(content, file.filename)
-    if result["status"] == "success":
-        return {"message": f"文件 {file.filename} 上传并入库成功", "path": result["path"]}
-    raise HTTPException(status_code=500, detail=result["message"])
+    filename = os.path.basename(file.filename or "").strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    result = data_manager.save_course_file(
+        content, filename, auto_ingest=False
+    )
+    if result["status"] != "success":
+        raise HTTPException(status_code=500, detail=result["message"])
+
+    content_hash = data_manager.calculate_content_hash(content)
+    file_type = os.path.splitext(filename)[1].lower().lstrip(".")
+    document, _ = rag_repo.get_or_create_document(
+        db,
+        content_hash=content_hash,
+        file_type=file_type,
+        file_size=len(content),
+    )
+    rag_repo.add_source(
+        db,
+        document_id=document.id,
+        scope_type="global",
+        filename=filename,
+        file_path=result["path"],
+    )
+    sources = rag_repo.list_sources(db, document.id)
+    scope_keys = rag_repo.scope_keys(sources)
+    serialized_sources = rag_repo.serialize_sources(sources)
+    reused = document.index_status == "ready"
+    if reused:
+        data_manager.update_document_access(
+            content_hash, scope_keys, serialized_sources
+        )
+    else:
+        indexed = data_manager.ingest_file(
+            result["path"],
+            metadata={
+                "document_hash": content_hash,
+                "scope_keys": scope_keys,
+                "sources": serialized_sources,
+                "source_key": f"document:{content_hash}",
+            },
+        )
+        if not indexed:
+            rag_repo.set_document_status(db, document, "failed")
+            raise HTTPException(status_code=400, detail="文件中没有可建立索引的文本内容")
+        rag_repo.set_document_status(db, document, "ready")
+    return {
+        "message": (
+            f"文件 {filename} 已登记，复用现有内容索引"
+            if reused
+            else f"文件 {filename} 上传并入库成功"
+        ),
+        "path": result["path"],
+        "content_hash": content_hash,
+        "index_reused": reused,
+    }
 
 
 @router.get("/files")

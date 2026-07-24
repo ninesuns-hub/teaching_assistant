@@ -94,7 +94,7 @@ def build_agent_tools(
 ) -> List:
     tools = [
         create_admin_tool(query_course_admin),
-        create_knowledge_tool(hybrid_searcher.query),
+        create_knowledge_tool(hybrid_searcher.query, context_getter),
         create_image_understanding_tool(context_getter),
     ]
     if include_learning_tools and db is not None and generated_by is not None:

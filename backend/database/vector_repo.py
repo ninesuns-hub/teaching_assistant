@@ -80,6 +80,9 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
 
     points = []
     for i, chunk in enumerate(chunks):
+        metadata = chunk.get("metadata", {})
+        document_hash = metadata.get("document_hash", "")
+        point_key = f"{document_hash}:{chunk.get('page', '')}:{i}:{chunk['text'][:80]}"
         # 统一元数据格式
         payload = {
             "text": chunk["text"],
@@ -87,11 +90,14 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
             "source_type": chunk["source_type"],
             "chapter": chunk.get("chapter", ""),
             "page": str(chunk.get("page", "")),
-            "metadata": chunk.get("metadata", {}) # 额外元数据
+            "document_hash": document_hash,
+            "scope_keys": metadata.get("scope_keys", []),
+            "sources": metadata.get("sources", []),
+            "metadata": metadata # 额外元数据
         }
 
         points.append(models.PointStruct(
-            id=str(uuid.uuid4()),
+            id=str(uuid.uuid5(uuid.NAMESPACE_URL, point_key)),
             vector=embeddings[i],
             payload=payload
         ))
@@ -101,6 +107,46 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
         points=points
     )
     logger.info(f"成功向 Qdrant 写入 {len(points)} 条数据")
+
+
+def _document_filter(content_hash: str) -> models.Filter:
+    return models.Filter(
+        must=[
+            models.FieldCondition(
+                key="document_hash",
+                match=models.MatchValue(value=content_hash),
+            )
+        ]
+    )
+
+
+def update_document_access(
+    content_hash: str,
+    scope_keys: list[str],
+    sources: list[dict],
+) -> None:
+    client = get_qdrant_client()
+    client.set_payload(
+        collection_name=settings.QDRANT_COLLECTION_NAME,
+        payload={
+            "scope_keys": scope_keys,
+            "sources": sources,
+        },
+        points=models.FilterSelector(filter=_document_filter(content_hash)),
+    )
+
+
+def delete_document(content_hash: str) -> None:
+    client = get_qdrant_client()
+    collections = client.get_collections().collections
+    if not any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections):
+        return
+    client.delete(
+        collection_name=settings.QDRANT_COLLECTION_NAME,
+        points_selector=models.FilterSelector(
+            filter=_document_filter(content_hash),
+        ),
+    )
 
 
 def delete_material_documents(class_id: int, material_id: int) -> None:
@@ -127,7 +173,12 @@ def delete_material_documents(class_id: int, material_id: int) -> None:
         ),
     )
 
-def query(question: str, source_type: str = None, top_k: int = None) -> List[Dict[str, Any]]:
+def query(
+    question: str,
+    source_type: str = None,
+    top_k: int = None,
+    scope_keys: list[str] | None = None,
+) -> List[Dict[str, Any]]:
     client = get_qdrant_client()
     embeddings = _embed([question])
     if not embeddings:
@@ -136,16 +187,22 @@ def query(question: str, source_type: str = None, top_k: int = None) -> List[Dic
     n_results = top_k if top_k is not None else settings.TOP_K
 
     # 构造过滤器
-    query_filter = None
+    must_conditions = []
     if source_type:
-        query_filter = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="source_type",
-                    match=models.MatchValue(value=source_type)
-                )
-            ]
+        must_conditions.append(
+            models.FieldCondition(
+                key="source_type",
+                match=models.MatchValue(value=source_type)
+            )
         )
+    if scope_keys:
+        must_conditions.append(
+            models.FieldCondition(
+                key="scope_keys",
+                match=models.MatchAny(any=scope_keys),
+            )
+        )
+    query_filter = models.Filter(must=must_conditions) if must_conditions else None
 
     search_result = client.query_points(
         collection_name=settings.QDRANT_COLLECTION_NAME,

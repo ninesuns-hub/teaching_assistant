@@ -111,6 +111,7 @@ class MaterialResponse(BaseModel):
     file_type: str
     file_size: int
     uploaded_at: str
+    content_hash: str | None = None
 
 
 class ConversationResponse(BaseModel):

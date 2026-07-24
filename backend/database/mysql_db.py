@@ -106,10 +106,44 @@ class ClassMaterial(Base):
     file_path = Column(String(500), nullable=False)
     file_type = Column(String(20), nullable=False)
     file_size = Column(BigInteger, default=0)
+    content_hash = Column(String(64), nullable=True, index=True)
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     classroom = relationship("ClassRoom", back_populates="materials")
+
+
+class RagDocument(Base):
+    __tablename__ = "rag_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    content_hash = Column(String(64), unique=True, nullable=False, index=True)
+    file_type = Column(String(20), nullable=False)
+    file_size = Column(BigInteger, default=0)
+    index_status = Column(String(20), nullable=False, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sources = relationship(
+        "RagDocumentSource",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+
+class RagDocumentSource(Base):
+    __tablename__ = "rag_document_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("rag_documents.id"), nullable=False, index=True)
+    scope_type = Column(String(20), nullable=False, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=True, index=True)
+    material_id = Column(Integer, ForeignKey("class_materials.id"), nullable=True, unique=True, index=True)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    document = relationship("RagDocument", back_populates="sources")
 
 
 class HomeworkAssignment(Base):
@@ -310,6 +344,18 @@ def _migrate_schema():
         try:
             conn.execute(text(
                 "ALTER TABLE conversations MODIFY COLUMN public_id VARCHAR(36) NOT NULL"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE class_materials ADD COLUMN content_hash VARCHAR(64) NULL AFTER file_size"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "CREATE INDEX ix_class_materials_content_hash ON class_materials (content_hash)"
             ))
         except Exception:
             pass

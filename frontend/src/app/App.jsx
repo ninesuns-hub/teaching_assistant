@@ -831,7 +831,9 @@ function AppController() {
           type: 'success',
           classId: targetClassId,
           filename: file.name,
-          message: `${file.name} ${t.auth.uploadSuccess}`,
+          message: result.index_reused
+            ? `${file.name} ${t.auth.indexReused}`
+            : `${file.name} ${t.auth.uploadSuccess}`,
         })
         if (uploadNoticeTimerRef.current) clearTimeout(uploadNoticeTimerRef.current)
         uploadNoticeTimerRef.current = setTimeout(() => setMaterialUploadNotice(null), 4000)

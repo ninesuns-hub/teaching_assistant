@@ -2,6 +2,7 @@ import os
 import shutil
 import logging
 import uuid
+import hashlib
 from typing import List, Dict, Any
 from agent_core.config.settings import settings
 from agent_core.rag.processor import DocumentProcessor
@@ -31,6 +32,18 @@ class DataManager:
         ]
         for d in dirs:
             os.makedirs(d, exist_ok=True)
+
+    @staticmethod
+    def calculate_content_hash(file_content: bytes) -> str:
+        return hashlib.sha256(file_content).hexdigest()
+
+    @staticmethod
+    def calculate_file_hash(file_path: str) -> str:
+        digest = hashlib.sha256()
+        with open(file_path, "rb") as file_obj:
+            for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     def save_course_file(self, file_content: bytes, filename: str, auto_ingest: bool = True):
         """
@@ -138,7 +151,7 @@ class DataManager:
             chunks = self.processor.pdf_parser.parse(file_path, artifact_name=artifact_name)
         else:
             logger.warning(f"暂不支持的文件格式: {file_path}")
-            return
+            return False
 
         if chunks:
             if metadata:
@@ -149,8 +162,10 @@ class DataManager:
                     }
             self.searcher.add_documents(chunks)
             logger.info(f"文件 {file_path} 已成功集成至 RAG 系统")
+            return True
         else:
             logger.warning(f"文件 {file_path} 解析结果为空")
+            return False
 
     def delete_class_material_index(self, class_id: int, material_id: int):
         """删除指定班级资料在向量与关键词检索中的内容。"""
@@ -158,6 +173,27 @@ class DataManager:
         artifact_path = os.path.join(
             settings.CHUNKS_DIR,
             f"class_{class_id}_material_{material_id}.md",
+        )
+        if os.path.isfile(artifact_path):
+            os.remove(artifact_path)
+
+    def update_document_access(
+        self,
+        content_hash: str,
+        scope_keys: list[str],
+        sources: list[dict],
+    ):
+        self.searcher.update_document_access(
+            content_hash,
+            scope_keys,
+            sources,
+        )
+
+    def delete_document_index(self, content_hash: str):
+        self.searcher.delete_document(content_hash)
+        artifact_path = os.path.join(
+            settings.CHUNKS_DIR,
+            f"document_{content_hash}.md",
         )
         if os.path.isfile(artifact_path):
             os.remove(artifact_path)
