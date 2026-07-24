@@ -434,7 +434,7 @@
   padding: 4px 0;
 }
 
-.mermaid-diagram {
+.mermaid-surface {
   max-width: 100%;
   margin: 10px 0 14px;
   overflow-x: auto;
@@ -456,19 +456,6 @@
   background: transparent;
 }
 
-.mermaid-fallback {
-  max-width: 100%;
-  margin: 10px 0 14px;
-  overflow-x: auto;
-  border-radius: var(--radius-control);
-  border: 1px solid var(--color-border-subtle);
-  background: color-mix(in srgb, var(--color-surface-2) 88%, transparent);
-  padding: 14px;
-  box-shadow:
-    var(--shadow-panel),
-    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 5%, transparent);
-}
-
 .mermaid-diagram svg {
   display: block;
   max-width: 100%;
@@ -479,6 +466,49 @@
 
 .mermaid-error {
   margin-bottom: 10px;
+  color: #ffd18a;
+  font-size: 13px;
+}
+
+.mermaid-fallback pre {
+  margin: 0 0 12px;
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 14%, transparent);
+  background: color-mix(in srgb, var(--color-surface-1) 45%, transparent);
+  color: var(--color-text-primary);
+}
+
+.mermaid-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mermaid-actions button {
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 22%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-1) 72%, transparent);
+  color: var(--color-text-primary);
+  padding: 6px 11px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.mermaid-actions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent) 52%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-1));
+}
+
+.mermaid-actions button:disabled {
+  cursor: not-allowed;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-bg);
+  border-color: var(--color-disabled-border);
+}
+
+.mermaid-repair-feedback {
+  margin-top: 9px;
   color: #ffd18a;
   font-size: 13px;
 }

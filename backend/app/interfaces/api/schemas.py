@@ -19,6 +19,17 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class MermaidRepairRequest(BaseModel):
+    conversation_id: str
+    message_id: int
+    source: str = Field(min_length=1, max_length=12000)
+    parse_error: str | None = Field(default=None, max_length=2000)
+
+
+class MermaidRepairResponse(BaseModel):
+    source: str
+
+
 class SendCodeRequest(BaseModel):
     email: str
 

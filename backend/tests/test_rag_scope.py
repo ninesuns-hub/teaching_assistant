@@ -119,10 +119,38 @@ class RagScopeTests(unittest.TestCase):
         self.assertEqual(len(matching), 1)
         self.assertEqual(matching[0]["text"], "new content")
 
+    def test_bm25_scope_index_is_cached_and_pretokens_are_persisted(self):
+        self.retriever.add_documents([
+            {
+                "text": "cached graph theorem",
+                "metadata": {
+                    "document_hash": "cached-hash",
+                    "scope_keys": ["global", "class:1"],
+                },
+            }
+        ])
+        scopes = ["global", "class:1"]
+        self.retriever.query("graph", scope_keys=scopes)
+        cached_index = self.retriever._scope_cache[tuple(sorted(scopes))][1]
+        self.retriever.query("theorem", scope_keys=scopes)
+        self.assertIs(
+            self.retriever._scope_cache[tuple(sorted(scopes))][1],
+            cached_index,
+        )
+
+        reloaded = BM25Retriever(self.retriever.storage_path)
+        self.assertEqual(len(reloaded._tokenized_corpus), 1)
+        self.assertEqual(reloaded._tokenized_corpus[0], ["cached", " ", "graph", " ", "theorem"])
+
     def test_qdrant_scope_filter_and_access_update(self):
         original_client = vector_repo._qdrant_client
         original_embed = vector_repo._embed
+        original_payload_index_checked = vector_repo._payload_index_checked
+        original_collection_ready = vector_repo._collection_ready
+        vector_repo._query_embedding_cache.clear()
         vector_repo._qdrant_client = QdrantClient(":memory:")
+        vector_repo._payload_index_checked = False
+        vector_repo._collection_ready = False
         vector_repo._embed = lambda texts: [
             [1.0] + [0.0] * 1535 for _ in texts
         ]
@@ -173,8 +201,11 @@ class RagScopeTests(unittest.TestCase):
                 ["qdrant-hash"],
             )
         finally:
+            vector_repo._query_embedding_cache.clear()
             vector_repo._qdrant_client = original_client
             vector_repo._embed = original_embed
+            vector_repo._payload_index_checked = original_payload_index_checked
+            vector_repo._collection_ready = original_collection_ready
 
 
 if __name__ == "__main__":

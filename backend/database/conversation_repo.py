@@ -106,6 +106,26 @@ def list_messages(db: Session, conversation_id: int, limit: int = 200) -> List[C
     )
 
 
+def get_user_assistant_message(
+    db: Session,
+    public_id: str,
+    message_id: int,
+    user_id: int,
+) -> Optional[ChatMessage]:
+    conversation = get_conversation(db, public_id, user_id)
+    if not conversation:
+        return None
+    return (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.id == message_id,
+            ChatMessage.conversation_id == conversation.id,
+            ChatMessage.role == "assistant",
+        )
+        .first()
+    )
+
+
 def update_message_feedback(
     db: Session,
     conversation_id: int,

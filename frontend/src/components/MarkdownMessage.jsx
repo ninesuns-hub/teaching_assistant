@@ -4,6 +4,7 @@ import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
+import { repairMermaidDiagram } from '../api/chat'
 
 const MERMAID_SCENE_THEMES = {
   day: {
@@ -87,7 +88,13 @@ function renderMermaidDiagram(diagramId, chart, scene) {
   return renderTask
 }
 
-function MermaidDiagram({ chart, scene }) {
+function MermaidDiagram({
+  chart,
+  scene,
+  conversationId,
+  messageId,
+  labels = {},
+}) {
   const reactId = useId()
   const diagramId = useMemo(
     () => `mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}-${scene}`,
@@ -95,13 +102,21 @@ function MermaidDiagram({ chart, scene }) {
   )
   const [svg, setSvg] = useState('')
   const [error, setError] = useState('')
+  const [activeChart, setActiveChart] = useState(chart)
+  const [copyState, setCopyState] = useState('')
+  const [repairing, setRepairing] = useState(false)
+  const [repairFeedback, setRepairFeedback] = useState('')
+
+  useEffect(() => {
+    setActiveChart(chart)
+  }, [chart])
 
   useEffect(() => {
     let cancelled = false
 
     async function renderDiagram() {
       try {
-        const result = await renderMermaidDiagram(diagramId, chart, scene)
+        const result = await renderMermaidDiagram(diagramId, activeChart, scene)
         if (!cancelled) {
           setSvg(result.svg)
           setError('')
@@ -119,32 +134,99 @@ function MermaidDiagram({ chart, scene }) {
     return () => {
       cancelled = true
     }
-  }, [chart, diagramId, scene])
+  }, [activeChart, diagramId, scene])
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(activeChart)
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
+  }
+
+  const handleRepair = async () => {
+    if (!conversationId || !messageId || repairing) return
+    setRepairing(true)
+    setRepairFeedback('')
+    try {
+      const result = await repairMermaidDiagram({
+        conversation_id: conversationId,
+        message_id: messageId,
+        source: chart,
+        parse_error: error,
+      })
+      setActiveChart(result.source)
+    } catch (err) {
+      setRepairFeedback(err.message || labels.mermaidRepairFailed || '图表重新生成失败')
+    } finally {
+      setRepairing(false)
+    }
+  }
 
   if (error) {
     return (
-      <div className="mermaid-fallback">
-        <div className="mermaid-error">Mermaid 图表渲染失败，已显示源码。</div>
-        <pre><code>{chart}</code></pre>
+      <div className="mermaid-surface mermaid-fallback">
+        <div className="mermaid-error">
+          {labels.mermaidRenderFailed || 'Mermaid 图表渲染失败，已显示源码。'}
+        </div>
+        <pre><code>{activeChart}</code></pre>
+        <div className="mermaid-actions">
+          <button type="button" onClick={handleCopy}>
+            {copyState === 'copied'
+              ? labels.mermaidCopied || '已复制'
+              : copyState === 'failed'
+                ? labels.mermaidCopyFailed || '复制失败'
+                : labels.mermaidCopySource || '复制源码'}
+          </button>
+          <button
+            type="button"
+            onClick={handleRepair}
+            disabled={repairing || !conversationId || !messageId}
+            title={!messageId ? labels.mermaidRepairPending || '回答保存后可重新生成' : undefined}
+          >
+            {repairing
+              ? labels.mermaidRegenerating || '正在重新生成…'
+              : labels.mermaidRegenerate || '重新生成图表'}
+          </button>
+        </div>
+        {repairFeedback && <div className="mermaid-repair-feedback">{repairFeedback}</div>}
       </div>
     )
   }
 
   return (
     <div
-      className="mermaid-diagram"
+      className="mermaid-surface mermaid-diagram"
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
 }
 
-function MarkdownCode({ inline, className, children, scene, ...props }) {
+function MarkdownCode({
+  inline,
+  className,
+  children,
+  scene,
+  conversationId,
+  messageId,
+  labels,
+  ...props
+}) {
   const languageMatch = /language-(\w+)/.exec(className || '')
   const language = languageMatch?.[1]
   const code = String(children).replace(/\n$/, '')
 
   if (!inline && language === 'mermaid') {
-    return <MermaidDiagram chart={code} scene={scene} />
+    return (
+      <MermaidDiagram
+        chart={code}
+        scene={scene}
+        conversationId={conversationId}
+        messageId={messageId}
+        labels={labels}
+      />
+    )
   }
 
   return (
@@ -208,16 +290,30 @@ function normalizeMathContent(content) {
   return text
 }
 
-function MarkdownMessage({ content, scene = 'night' }) {
+function MarkdownMessage({
+  content,
+  scene = 'night',
+  conversationId = null,
+  messageId = null,
+  labels = {},
+}) {
   const normalized = useMemo(() => normalizeMathContent(content), [content])
   const markdownComponents = useMemo(
     () => ({
       code: function SceneMarkdownCode(props) {
-        return <MarkdownCode {...props} scene={scene} />
+        return (
+          <MarkdownCode
+            {...props}
+            scene={scene}
+            conversationId={conversationId}
+            messageId={messageId}
+            labels={labels}
+          />
+        )
       },
       pre: MarkdownPre,
     }),
-    [scene],
+    [conversationId, labels, messageId, scene],
   )
 
   return (

@@ -1196,30 +1196,55 @@ function AppController() {
     setIsSending(true)
 
     // 创建一个空的助手消息占位
-    const assistantMessage = { role: 'assistant', content: '' }
+    const assistantMessage = {
+      role: 'assistant',
+      content: '',
+      statusStage: 'understanding',
+    }
     setMessages(prev => [...prev, assistantMessage])
 
     try {
-      const newConversationId = await sendChatMessage({
+      const streamResult = await sendChatMessage({
         message: text,
         conversation_id: conversationId,
         class_id: activeClassId,
         ...imagePayload,
-      }, (chunk) => {
+      }, (event) => {
         setMessages(prev => {
           const lastIndex = prev.length - 1
           if (lastIndex >= 0 && prev[lastIndex].role === 'assistant') {
-            // 创建一个全新的数组和全新的消息对象，确保不可变性
             const newMessages = [...prev]
-            newMessages[lastIndex] = {
-              ...newMessages[lastIndex],
-              content: newMessages[lastIndex].content + chunk
+            const current = newMessages[lastIndex]
+            if (event.type === 'content') {
+              newMessages[lastIndex] = {
+                ...current,
+                content: current.content + (event.delta || ''),
+                statusStage: null,
+              }
+            } else if (event.type === 'status' && !current.content) {
+              newMessages[lastIndex] = {
+                ...current,
+                statusStage: event.stage,
+              }
+            } else if (event.type === 'done') {
+              newMessages[lastIndex] = {
+                ...current,
+                id: event.message_id || current.id,
+                statusStage: null,
+              }
+            } else if (event.type === 'error') {
+              newMessages[lastIndex] = {
+                ...current,
+                content: current.content || event.message || '抱歉，发生了错误，请稍后再试。',
+                statusStage: null,
+              }
             }
             return newMessages
           }
           return prev
         })
       })
+      const newConversationId = streamResult.conversationId
       if (newConversationId) {
         setConversationId(newConversationId)
         await loadConversations()

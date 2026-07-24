@@ -1,6 +1,10 @@
 import sys
 import os
 import mimetypes
+import json
+import logging
+import time
+import uuid
 
 backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if backend_dir not in sys.path:
@@ -11,7 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
-from .schemas import ChatRequest
+from .schemas import ChatRequest, MermaidRepairRequest, MermaidRepairResponse
 from agent_core import ReactAgent
 from database.course_repo import query_course_admin, init_db
 from database.mysql_db import get_db, User, UserRole
@@ -19,6 +23,7 @@ from database import conversation_repo, rag_repo
 from agent_core.config.settings import settings
 from app.core.data_manager import data_manager
 from app.core.chat_image_store import save_chat_image, resolve_image_path
+from app.core.mermaid_service import repair_mermaid_source
 from app.core.agent_bindings import build_agent_tools
 from app.core.deps import get_current_user, require_role
 from .auth_routes import router as auth_router
@@ -28,6 +33,7 @@ from .learning_routes import router as learning_router
 from .homework_routes import router as homework_router
 
 hybrid_searcher = data_manager.searcher
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
@@ -100,51 +106,106 @@ def _build_welcome_input(current_user: User, class_name: Optional[str] = None) -
     )
 
 
+def _sse(event_type: str, payload: dict) -> str:
+    return (
+        f"event: {event_type}\n"
+        f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+    )
+
+
+def _log_chat_timing(request_id: str, stage: str, started_at: float, **fields) -> None:
+    logger.info(
+        json.dumps(
+            {
+                "event": "chat_timing",
+                "request_id": request_id,
+                "stage": stage,
+                "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                **fields,
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
 def _stream_welcome(agent_input: str, request_context: dict):
-    for chunk in agent.stream_chat(agent_input, request_context=request_context):
-        yield chunk
+    for event in agent.stream_events(agent_input, request_context=request_context):
+        if event["type"] == "content":
+            yield _sse("content", {"delta": event.get("delta", "")})
+        elif event["type"] == "status":
+            yield _sse("status", {"stage": event.get("stage", "understanding")})
+        elif event["type"] == "error":
+            yield _sse("error", {"message": event.get("message", "生成介绍失败")})
+    yield _sse("done", {})
 
 
 def _stream_and_persist(
     display_message: str,
     agent_input: str,
     conversation_id: int,
+    conversation_public_id: str,
     request_context: dict,
     image_path: Optional[str] = None,
 ):
     from database.mysql_db import SessionLocal
 
+    request_id = request_context.get("request_id", "-")
+    request_started_at = time.perf_counter()
     full_response = ""
     observations = None
+    for event in agent.stream_events(agent_input, request_context=request_context):
+        if event["type"] == "content":
+            delta = event.get("delta", "")
+            if delta:
+                full_response += delta
+                yield _sse("content", {"delta": delta})
+        elif event["type"] == "status":
+            yield _sse("status", {"stage": event.get("stage", "understanding")})
+        elif event["type"] == "error":
+            message = event.get("message", "处理请求时出现错误")
+            if not full_response:
+                full_response = message
+            yield _sse("error", {"message": message})
+
+    if hasattr(agent, "last_observations"):
+        observations = agent.last_observations
+
+    save_started_at = time.perf_counter()
+    db = SessionLocal()
     try:
-        for chunk in agent.stream_chat(agent_input, request_context=request_context):
-            full_response += chunk
-            yield chunk
-        if hasattr(agent, "last_observations"):
-            observations = agent.last_observations
+        ctx = {}
+        if observations:
+            ctx["observations"] = observations
+        conversation_repo.add_message(
+            db,
+            conversation_id,
+            "user",
+            display_message,
+            image_path=image_path,
+            retrieved_context=ctx if observations else None,
+        )
+        assistant_message = conversation_repo.add_message(
+            db,
+            conversation_id,
+            "assistant",
+            full_response or "（无回复）",
+            retrieved_context={"observations": observations} if observations else None,
+        )
+    except Exception:
+        logger.exception("聊天消息保存失败 request_id=%s", request_id)
+        yield _sse("error", {"message": "回答已生成，但保存聊天记录失败"})
+        return
     finally:
-        db = SessionLocal()
-        try:
-            ctx = {}
-            if observations:
-                ctx["observations"] = observations
-            conversation_repo.add_message(
-                db,
-                conversation_id,
-                "user",
-                display_message,
-                image_path=image_path,
-                retrieved_context=ctx if observations else None,
-            )
-            conversation_repo.add_message(
-                db,
-                conversation_id,
-                "assistant",
-                full_response or "（无回复）",
-                retrieved_context={"observations": observations} if observations else None,
-            )
-        finally:
-            db.close()
+        db.close()
+    _log_chat_timing(request_id, "message_persistence", save_started_at)
+    _log_chat_timing(request_id, "request_total", request_started_at)
+    yield _sse(
+        "done",
+        {
+            "conversation_id": conversation_public_id,
+            "message_id": assistant_message.id,
+        },
+    )
 
 
 @router.post("/chat")
@@ -200,6 +261,7 @@ def chat(
         "user_id": current_user.id,
         "user_role": current_user.role.value,
         "class_id": resolved_class_id,
+        "request_id": str(uuid.uuid4()),
     }
     if image_path:
         request_context["image_path"] = image_path
@@ -211,11 +273,17 @@ def chat(
                 display_message,
                 agent_input,
                 conversation.id,
+                conversation.public_id,
                 request_context,
                 image_path,
             ),
             media_type="text/event-stream",
-            headers={"X-Conversation-Id": conversation.public_id},
+            headers={
+                "X-Conversation-Id": conversation.public_id,
+                "X-Chat-Stream-Protocol": "sse-v1",
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="图片文件不存在")
@@ -255,13 +323,48 @@ def chat_welcome(
         "user_id": current_user.id,
         "user_role": current_user.role.value,
         "class_id": resolved_class_id,
+        "request_id": str(uuid.uuid4()),
     }
     agent_input = _build_welcome_input(current_user, class_name)
 
     return StreamingResponse(
         _stream_welcome(agent_input, request_context),
         media_type="text/event-stream",
+        headers={
+            "X-Chat-Stream-Protocol": "sse-v1",
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
+
+
+@router.post("/chat/mermaid/repair", response_model=MermaidRepairResponse)
+def repair_mermaid(
+    payload: MermaidRepairRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    message = conversation_repo.get_user_assistant_message(
+        db,
+        payload.conversation_id,
+        payload.message_id,
+        current_user.id,
+    )
+    if not message:
+        raise HTTPException(status_code=404, detail="没有找到对应的助手消息")
+    if payload.source.strip() not in message.content:
+        raise HTTPException(status_code=400, detail="该图表源码不属于对应的助手消息")
+    try:
+        repaired = repair_mermaid_source(
+            payload.source.strip(),
+            payload.parse_error,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Mermaid 修复失败")
+        raise HTTPException(status_code=502, detail="图表重新生成失败，请稍后重试") from exc
+    return MermaidRepairResponse(source=repaired)
 
 
 @router.get("/chat/images/{user_id}/{filename}")
