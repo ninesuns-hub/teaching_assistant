@@ -28,6 +28,12 @@ export async function uploadClassMaterial(classId, file) {
   return uploadRequest(`/api/classes/${classId}/materials`, formData)
 }
 
+export async function deleteClassMaterial(classId, materialId) {
+  return request(`/api/classes/${classId}/materials/${materialId}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function fetchMaterialFile(classId, materialId, download = false) {
   const query = download ? '?download=true' : ''
   const url = `${API_BASE_URL}/api/classes/${classId}/materials/${materialId}/file${query}`

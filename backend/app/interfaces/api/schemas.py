@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ChatRequest(BaseModel):
@@ -181,6 +181,13 @@ class ClassFeedbackResponse(BaseModel):
     created_at: str
 
 
+class HomeworkAttachmentResponse(BaseModel):
+    id: int
+    filename: str
+    file_type: str
+    file_size: int = 0
+
+
 class HomeworkResponse(BaseModel):
     id: int
     class_id: int
@@ -189,6 +196,7 @@ class HomeworkResponse(BaseModel):
     due_at: str | None = None
     attachment_name: str | None = None
     has_attachment: bool = False
+    attachments: list[HomeworkAttachmentResponse] = Field(default_factory=list)
     created_at: str
     submission_count: int = 0
     my_submission: dict | None = None

@@ -126,7 +126,22 @@ class HomeworkAssignment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     classroom = relationship("ClassRoom", back_populates="homeworks")
+    attachments = relationship("HomeworkAttachment", back_populates="homework", cascade="all, delete-orphan")
     submissions = relationship("HomeworkSubmission", back_populates="homework", cascade="all, delete-orphan")
+
+
+class HomeworkAttachment(Base):
+    __tablename__ = "homework_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    homework_id = Column(Integer, ForeignKey("homework_assignments.id"), nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_type = Column(String(20), nullable=False)
+    file_size = Column(BigInteger, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    homework = relationship("HomeworkAssignment", back_populates="attachments")
 
 
 class HomeworkSubmission(Base):
@@ -298,6 +313,31 @@ def _migrate_schema():
             ))
         except Exception:
             pass
+        try:
+            conn.execute(text(
+                """
+                INSERT INTO homework_attachments
+                    (homework_id, filename, file_path, file_type, file_size, created_at)
+                SELECT
+                    h.id,
+                    COALESCE(h.attachment_name, 'attachment'),
+                    h.attachment_path,
+                    LOWER(SUBSTRING_INDEX(COALESCE(h.attachment_name, ''), '.', -1)),
+                    0,
+                    COALESCE(h.created_at, UTC_TIMESTAMP())
+                FROM homework_assignments h
+                WHERE h.attachment_path IS NOT NULL
+                  AND h.attachment_path <> ''
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM homework_attachments a
+                      WHERE a.homework_id = h.id
+                        AND a.file_path = h.attachment_path
+                  )
+                """
+            ))
+        except Exception as exc:
+            logger.warning("迁移旧作业附件失败: %s", exc)
         conn.commit()
 
 

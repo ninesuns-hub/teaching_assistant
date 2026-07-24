@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { sendChatMessage, sendWelcomeMessage } from '../api/chat'
 import { sendCode, register, login, selectRole } from '../api/auth'
-import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, fetchMaterialFile, fetchMaterialPreview } from '../api/classes'
+import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, deleteClassMaterial, fetchMaterialFile, fetchMaterialPreview } from '../api/classes'
 import { fetchConversations, fetchConversationMessages, deleteConversation, renameConversation, submitConversationFeedback } from '../api/conversations'
 import {
   fetchClassStudents,
@@ -20,6 +20,7 @@ import {
   submitHomework,
   fetchHomeworkSubmissions,
   downloadHomeworkAttachment,
+  fetchHomeworkAttachmentFile,
   downloadSubmissionFile,
 } from '../api/homework'
 import { getStoredUser, setAuth, clearAuth } from '../api/httpClient'
@@ -32,7 +33,7 @@ import ChatPage from '../pages/ChatPage'
 import ResourcesPage from '../pages/ResourcesPage'
 import HomeworkPage from '../pages/HomeworkPage'
 import { EXAMPLE_PROMPT_GROUPS, SCENE_QUOTES, TRANSLATIONS } from '../config/uiContent'
-import { CODE_COOLDOWN_SEC, TONGJI_EMAIL_RE, getBeijingHour, getMaterialCategory, getRemainingCooldown, getSceneByHour, saveCooldown } from '../utils/appUtils'
+import { CODE_COOLDOWN_SEC, TONGJI_EMAIL_RE, getBeijingHour, getMaterialCategory, getRemainingCooldown, getSceneByHour, saveCooldown, sortMaterials } from '../utils/appUtils'
 
 const SCENE_OPTIONS = [
   { key: 'night', label: { en: 'Starry Night', zh: '星空黑夜' }, angle: 0 },
@@ -112,7 +113,7 @@ function AppController() {
   const [materialUploadNotice, setMaterialUploadNotice] = useState(null)
   const [homeworks, setHomeworks] = useState([])
   const [homeworkForm, setHomeworkForm] = useState({ title: '', description: '', dueAt: '' })
-  const [homeworkFile, setHomeworkFile] = useState(null)
+  const [homeworkFiles, setHomeworkFiles] = useState([])
   const [homeworkBusy, setHomeworkBusy] = useState(false)
   const [expandedHomeworkId, setExpandedHomeworkId] = useState(null)
   const [homeworkSubmissions, setHomeworkSubmissions] = useState({})
@@ -140,6 +141,8 @@ function AppController() {
   const loadedConversationIdRef = useRef(null)
   const [language, setLanguage] = useState('zh')
   const [activeFilter, setActiveFilter] = useState('All')
+  const [materialSortBy, setMaterialSortBy] = useState('name')
+  const [materialSortDirection, setMaterialSortDirection] = useState('asc')
   const [exampleGroupIndex, setExampleGroupIndex] = useState(0)
 
   const [dialRotation, setDialRotation] = useState(0)
@@ -211,9 +214,11 @@ function AppController() {
     return t.placeholder
   }, [user, t])
   const visibleMaterials = useMemo(() => {
-    if (activeFilter === 'All') return materials
-    return materials.filter(m => getMaterialCategory(m) === activeFilter)
-  }, [materials, activeFilter])
+    const filtered = activeFilter === 'All'
+      ? materials
+      : materials.filter(m => getMaterialCategory(m) === activeFilter)
+    return sortMaterials(filtered, materialSortBy, materialSortDirection, language)
+  }, [materials, activeFilter, materialSortBy, materialSortDirection, language])
 
   const loadClasses = useCallback(async () => {
     if (!user?.role) return
@@ -636,7 +641,7 @@ function AppController() {
     setMaterialUploadNotice(null)
     setHomeworks([])
     setHomeworkForm({ title: '', description: '', dueAt: '' })
-    setHomeworkFile(null)
+    setHomeworkFiles([])
     setExpandedHomeworkId(null)
     setHomeworkSubmissions({})
     setSubmitDrafts({})
@@ -844,6 +849,18 @@ function AppController() {
     })
   }
 
+  const handleDeleteMaterial = async (material) => {
+    if (!activeClassId || !window.confirm(t.auth.deleteMaterialConfirm)) return
+    return runPendingAction(`material:delete:${material.id}`, async () => {
+      try {
+        await deleteClassMaterial(activeClassId, material.id)
+        setMaterials(current => current.filter(item => item.id !== material.id))
+      } catch (err) {
+        alert(err.message)
+      }
+    })
+  }
+
   const openMaterialFile = async (material, download = false) => {
     if (!activeClassId) return
     const actionKey = `material:${download ? 'download' : 'view'}:${material.id}`
@@ -892,10 +909,10 @@ function AppController() {
           title: homeworkForm.title.trim(),
           description: homeworkForm.description,
           dueAt: homeworkForm.dueAt,
-          file: homeworkFile,
+          files: homeworkFiles,
         })
         setHomeworkForm({ title: '', description: '', dueAt: '' })
-        setHomeworkFile(null)
+        setHomeworkFiles([])
         await loadHomeworks(activeClassId)
       } catch (err) {
         alert(err.message)
@@ -959,6 +976,28 @@ function AppController() {
       try {
         const blob = await downloadHomeworkAttachment(hw.id)
         downloadBlobFile(blob, hw.attachment_name || 'attachment')
+      } catch (err) {
+        alert(err.message)
+      }
+    })
+  }
+
+  const handleOpenHomeworkAttachment = async (homework, attachment, download = false) => {
+    const actionKey = `homework:attachment:${download ? 'download' : 'view'}:${attachment.id}`
+    return runPendingAction(actionKey, async () => {
+      try {
+        const blob = await fetchHomeworkAttachmentFile(
+          homework.id,
+          attachment.id,
+          download,
+        )
+        if (download) {
+          downloadBlobFile(blob, attachment.filename)
+          return
+        }
+        const url = URL.createObjectURL(blob)
+        window.open(url, '_blank', 'noopener,noreferrer')
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
       } catch (err) {
         alert(err.message)
       }
@@ -1247,8 +1286,10 @@ function AppController() {
     handleCopyMessage,
     handleCreateClass,
     handleDeleteHomework,
+    handleDeleteMaterial,
     handleDownloadAttachment,
     handleDownloadSubmission,
+    handleOpenHomeworkAttachment,
     handleExampleSelect,
     handleFeedback,
     handleJoinClass,
@@ -1273,7 +1314,7 @@ function AppController() {
     handleToggleSubmissions,
     handleUploadMaterial,
     homeworkBusy,
-    homeworkFile,
+    homeworkFiles,
     homeworkForm,
     homeworks,
     homeworkSubmissions,
@@ -1287,6 +1328,8 @@ function AppController() {
     language,
     materials,
     materialUploadNotice,
+    materialSortBy,
+    materialSortDirection,
     messages,
     messagesListRef,
     messagesEndRef,
@@ -1300,8 +1343,10 @@ function AppController() {
     setAuthForm,
     setAuthModal,
     setClassForm,
-    setHomeworkFile,
+    setHomeworkFiles,
     setHomeworkForm,
+    setMaterialSortBy,
+    setMaterialSortDirection,
     setInput,
     setPendingImage,
     setSidebarOpen,

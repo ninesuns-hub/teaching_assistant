@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from database.mysql_db import (
@@ -97,9 +98,15 @@ def user_owns_class(db: Session, user: User, class_id: int) -> bool:
 
 
 def list_materials(db: Session, class_id: int) -> List[ClassMaterial]:
-    return db.query(ClassMaterial).filter(ClassMaterial.class_id == class_id).order_by(
-        ClassMaterial.uploaded_at.desc()
-    ).all()
+    materials = db.query(ClassMaterial).filter(ClassMaterial.class_id == class_id).all()
+
+    def natural_name_key(material: ClassMaterial):
+        return [
+            (0, int(part)) if part.isdigit() else (1, part.casefold())
+            for part in re.split(r"(\d+)", material.filename or "")
+        ]
+
+    return sorted(materials, key=natural_name_key)
 
 
 def get_material(db: Session, class_id: int, material_id: int) -> Optional[ClassMaterial]:
@@ -107,6 +114,27 @@ def get_material(db: Session, class_id: int, material_id: int) -> Optional[Class
         ClassMaterial.id == material_id,
         ClassMaterial.class_id == class_id,
     ).first()
+
+
+def get_material_by_name_and_type(
+    db: Session, class_id: int, filename: str
+) -> Optional[ClassMaterial]:
+    target_stem, target_ext = os.path.splitext(filename.strip())
+    target_stem = target_stem.casefold()
+    target_ext = target_ext.casefold()
+    materials = db.query(ClassMaterial).filter(
+        ClassMaterial.class_id == class_id,
+    ).all()
+    for material in materials:
+        stem, ext = os.path.splitext(material.filename or "")
+        if stem.casefold() == target_stem and ext.casefold() == target_ext:
+            return material
+    return None
+
+
+def delete_material(db: Session, material: ClassMaterial) -> None:
+    db.delete(material)
+    db.commit()
 
 
 def list_class_students(db: Session, class_id: int) -> List[dict]:

@@ -102,6 +102,31 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
     )
     logger.info(f"成功向 Qdrant 写入 {len(points)} 条数据")
 
+
+def delete_material_documents(class_id: int, material_id: int) -> None:
+    """按班级资料身份删除向量索引，避免误删其他班级的同名文件。"""
+    client = get_qdrant_client()
+    collections = client.get_collections().collections
+    if not any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections):
+        return
+    client.delete(
+        collection_name=settings.QDRANT_COLLECTION_NAME,
+        points_selector=models.FilterSelector(
+            filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="metadata.class_id",
+                        match=models.MatchValue(value=class_id),
+                    ),
+                    models.FieldCondition(
+                        key="metadata.material_id",
+                        match=models.MatchValue(value=material_id),
+                    ),
+                ]
+            )
+        ),
+    )
+
 def query(question: str, source_type: str = None, top_k: int = None) -> List[Dict[str, Any]]:
     client = get_qdrant_client()
     embeddings = _embed([question])

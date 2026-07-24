@@ -194,6 +194,31 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.resource-sort-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.resource-sort-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--color-text-meta);
+  font-size: var(--font-size-caption);
+}
+
+.resource-sort-controls select {
+  min-height: 38px;
+  padding: 7px 28px 7px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+  font: inherit;
 }
 
 .material-upload-notice {
@@ -573,6 +598,66 @@
   align-items: center;
 }
 
+.homework-due-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--color-text-meta);
+  font-size: var(--font-size-caption);
+}
+
+.homework-due-field input {
+  min-height: 42px;
+}
+
+.homework-selected-files {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-1);
+}
+
+.homework-selected-file,
+.homework-attachment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.homework-selected-file > span,
+.homework-attachment-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.homework-attachments {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-1);
+}
+
+.homework-attachments > strong {
+  font-size: var(--font-size-meta);
+}
+
+.homework-attachment-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.homework-attachment-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-meta);
+}
+
 .homework-list {
   display: flex;
   flex-direction: column;
@@ -671,6 +756,11 @@
   .homework-publish-row {
     flex-direction: column;
     align-items: stretch;
+  }
+  .homework-selected-file,
+  .homework-attachment-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

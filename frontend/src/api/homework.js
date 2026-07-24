@@ -4,12 +4,12 @@ export async function fetchHomeworks(classId) {
   return request(`/api/homework/classes/${classId}/homeworks`)
 }
 
-export async function createHomework(classId, { title, description = '', dueAt = '', file = null }) {
+export async function createHomework(classId, { title, description = '', dueAt = '', files = [] }) {
   const formData = new FormData()
   formData.append('title', title)
   formData.append('description', description || '')
   formData.append('due_at', dueAt || '')
-  if (file) formData.append('file', file)
+  files.forEach(file => formData.append('files', file))
   return uploadRequest(`/api/homework/classes/${classId}/homeworks`, formData)
 }
 
@@ -49,6 +49,11 @@ async function fetchBlob(path) {
 
 export async function downloadHomeworkAttachment(homeworkId) {
   return fetchBlob(`/api/homework/homeworks/${homeworkId}/attachment`)
+}
+
+export async function fetchHomeworkAttachmentFile(homeworkId, attachmentId, download = false) {
+  const query = download ? '?download=true' : ''
+  return fetchBlob(`/api/homework/homeworks/${homeworkId}/attachments/${attachmentId}/file${query}`)
 }
 
 export async function downloadSubmissionFile(submissionId) {

@@ -28,6 +28,7 @@ export default function ResourcesPage({ model }) {
     classes,
     handleAddStudent,
     handleCreateClass,
+    handleDeleteMaterial,
     handleJoinClass,
     handleRemoveStudent,
     handleUploadMaterial,
@@ -37,11 +38,15 @@ export default function ResourcesPage({ model }) {
     language,
     materials,
     materialUploadNotice,
+    materialSortBy,
+    materialSortDirection,
     openMaterialFile,
     secondPageTitle,
     setActiveClassId,
     setActiveFilter,
     setClassForm,
+    setMaterialSortBy,
+    setMaterialSortDirection,
     setStudentEmailInput,
     setStudentsOpen,
     studentBusy,
@@ -245,6 +250,22 @@ export default function ResourcesPage({ model }) {
               </div>
               <div className="resource-library-tools">
                 <ResourceFilters activeFilter={activeFilter} setActiveFilter={setActiveFilter} t={t} />
+                <div className="resource-sort-controls" aria-label={t.auth.materialSort}>
+                  <label>
+                    <span>{t.auth.sortBy}</span>
+                    <select value={materialSortBy} onChange={event => setMaterialSortBy(event.target.value)}>
+                      <option value="name">{t.auth.sortByName}</option>
+                      <option value="uploadedAt">{t.auth.sortByUploadedAt}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t.auth.sortDirection}</span>
+                    <select value={materialSortDirection} onChange={event => setMaterialSortDirection(event.target.value)}>
+                      <option value="asc">{t.auth.sortAscending}</option>
+                      <option value="desc">{t.auth.sortDescending}</option>
+                    </select>
+                  </label>
+                </div>
                 {isTeacher && activeClassId && (
                   <label className="upload-btn upload-btn-primary" aria-busy={isActionPending('material:upload')}>
                     {isActionPending('material:upload') && materialUploadNotice?.filename
@@ -279,6 +300,17 @@ export default function ResourcesPage({ model }) {
                       <button type="button" className="download-btn" disabled={isActionPending(`material:download:${material.id}`)} aria-busy={isActionPending(`material:download:${material.id}`)} onClick={() => openMaterialFile(material, true)}>
                         {isActionPending(`material:download:${material.id}`) ? t.auth.downloading : t.download}
                       </button>
+                      {isTeacher && (
+                        <button
+                          type="button"
+                          className="download-btn danger"
+                          disabled={isActionPending(`material:delete:${material.id}`)}
+                          aria-busy={isActionPending(`material:delete:${material.id}`)}
+                          onClick={() => handleDeleteMaterial(material)}
+                        >
+                          {isActionPending(`material:delete:${material.id}`) ? t.auth.deleting : t.auth.deleteMaterial}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

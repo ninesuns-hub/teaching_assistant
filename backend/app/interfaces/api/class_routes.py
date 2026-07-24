@@ -1,6 +1,6 @@
 import os
 from html import escape
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from pptx import Presentation
@@ -144,27 +144,53 @@ async def upload_class_material(
     if not class_repo.user_owns_class(db, current_user, class_id):
         raise HTTPException(status_code=403, detail="仅班级创建者可上传资料")
 
-    ext = (file.filename or "").lower()
+    filename = os.path.basename(file.filename or "").strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    if class_repo.get_material_by_name_and_type(db, class_id, filename):
+        raise HTTPException(
+            status_code=409,
+            detail=f"同名且同类型的文件 {filename} 已存在，请删除原资料或改名后重试",
+        )
+
+    ext = filename.lower()
     if not ext.endswith((".pdf", ".pptx", ".ppsx")):
         raise HTTPException(status_code=400, detail="仅支持 PDF、PPTX、PPSX 文件")
 
     content = await file.read()
-    result = data_manager.save_class_material(content, file.filename, class_id)
+    result = data_manager.save_class_material(
+        content, filename, class_id, auto_ingest=False
+    )
     if result["status"] != "success":
         raise HTTPException(status_code=500, detail=result.get("message", "上传失败"))
 
     file_type = "pdf" if ext.endswith(".pdf") else "pptx"
-    material = class_repo.add_material(
-        db,
-        class_id=class_id,
-        filename=file.filename,
-        file_path=result["path"],
-        file_type=file_type,
-        file_size=len(content),
-        uploader_id=current_user.id,
-    )
+    try:
+        material = class_repo.add_material(
+            db,
+            class_id=class_id,
+            filename=filename,
+            file_path=result["path"],
+            file_type=file_type,
+            file_size=len(content),
+            uploader_id=current_user.id,
+        )
+        data_manager.ingest_file(
+            result["path"],
+            metadata={
+                "class_id": class_id,
+                "material_id": material.id,
+                "source_key": f"class:{class_id}:material:{material.id}",
+            },
+        )
+    except Exception as exc:
+        if "material" in locals():
+            class_repo.delete_material(db, material)
+        if os.path.isfile(result["path"]):
+            os.remove(result["path"])
+        raise HTTPException(status_code=500, detail=f"资料入库失败: {exc}") from exc
     return {
-        "message": f"文件 {file.filename} 上传成功",
+        "message": f"文件 {filename} 上传成功",
         "material": MaterialResponse(
             id=material.id,
             class_id=material.class_id,
@@ -174,6 +200,34 @@ async def upload_class_material(
             uploaded_at=material.uploaded_at.isoformat(),
         ),
     }
+
+
+@router.delete("/{class_id}/materials/{material_id}", status_code=204)
+def delete_class_material(
+    class_id: int,
+    material_id: int,
+    current_user: User = Depends(require_role(UserRole.TEACHER)),
+    db: Session = Depends(get_db),
+):
+    from app.core.data_manager import data_manager
+
+    if not class_repo.user_owns_class(db, current_user, class_id):
+        raise HTTPException(status_code=403, detail="仅班级创建者可删除资料")
+    material = class_repo.get_material(db, class_id, material_id)
+    if not material:
+        raise HTTPException(status_code=404, detail="资料不存在")
+
+    try:
+        data_manager.delete_class_material_index(class_id, material_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"清理资料索引失败: {exc}") from exc
+
+    file_path = os.path.realpath(material.file_path)
+    base_dir = os.path.realpath(settings.CLASS_MATERIALS_DIR)
+    if os.path.commonpath([file_path, base_dir]) == base_dir and os.path.isfile(file_path):
+        os.remove(file_path)
+    class_repo.delete_material(db, material)
+    return Response(status_code=204)
 
 
 @router.get("/{class_id}/materials/{material_id}/file")

@@ -1,7 +1,40 @@
-
-
 export default function HomeworkPage({ model }) {
-  const { activeClassId, expandedHomeworkId, handleDeleteHomework, handleDownloadAttachment, handleDownloadSubmission, handlePublishHomework, handleSubmitHomework, handleToggleSubmissions, homeworkBusy, homeworkFile, homeworkForm, homeworks, homeworkSubmissions, isActionPending, isStudent, isTeacher, setHomeworkFile, setHomeworkForm, setSubmitDrafts, submitDrafts, t } = model
+  const {
+    activeClassId,
+    expandedHomeworkId,
+    handleDeleteHomework,
+    handleDownloadAttachment,
+    handleDownloadSubmission,
+    handleOpenHomeworkAttachment,
+    handlePublishHomework,
+    handleSubmitHomework,
+    handleToggleSubmissions,
+    homeworkBusy,
+    homeworkFiles,
+    homeworkForm,
+    homeworks,
+    homeworkSubmissions,
+    isActionPending,
+    isStudent,
+    isTeacher,
+    setHomeworkFiles,
+    setHomeworkForm,
+    setSubmitDrafts,
+    submitDrafts,
+    t,
+  } = model
+
+  const addHomeworkFiles = event => {
+    const selected = Array.from(event.target.files || [])
+    setHomeworkFiles(current => {
+      const existing = new Set(current.map(file => `${file.name}:${file.size}:${file.lastModified}`))
+      return [
+        ...current,
+        ...selected.filter(file => !existing.has(`${file.name}:${file.size}:${file.lastModified}`)),
+      ]
+    })
+    event.target.value = ''
+  }
 
   return (
     <section id="section-homework" className="section section-homework">
@@ -25,20 +58,25 @@ export default function HomeworkPage({ model }) {
                       rows={3}
                     />
                     <div className="homework-publish-row">
-                      <input
-                        type="datetime-local"
-                        value={homeworkForm.dueAt}
-                        onChange={e => setHomeworkForm(p => ({ ...p, dueAt: e.target.value }))}
-                        aria-label={t.auth.homeworkDue}
-                      />
+                      <label className="homework-due-field">
+                        <span>{t.auth.homeworkDueLabel}</span>
+                        <input
+                          type="datetime-local"
+                          value={homeworkForm.dueAt}
+                          onChange={e => setHomeworkForm(p => ({ ...p, dueAt: e.target.value }))}
+                        />
+                      </label>
                       <label className="upload-btn soft">
-                        {homeworkFile ? homeworkFile.name : t.auth.homeworkAttach}
+                        {homeworkFiles.length > 0
+                          ? t.auth.homeworkFilesSelected.replace('{count}', homeworkFiles.length)
+                          : t.auth.homeworkAttach}
                         <input
                           type="file"
+                          multiple
                           accept=".pdf,.pptx,.ppsx,.doc,.docx,.zip,.png,.jpg,.jpeg"
                           className="visually-hidden-file-input"
                           disabled={homeworkBusy}
-                          onChange={e => setHomeworkFile(e.target.files?.[0] || null)}
+                          onChange={addHomeworkFiles}
                         />
                       </label>
                       <button
@@ -51,6 +89,23 @@ export default function HomeworkPage({ model }) {
                         {isActionPending('homework:publish') ? t.auth.publishing : t.auth.publishHomework}
                       </button>
                     </div>
+                    {homeworkFiles.length > 0 && (
+                      <div className="homework-selected-files" aria-label={t.auth.selectedAttachments}>
+                        {homeworkFiles.map((file, index) => (
+                          <div key={`${file.name}:${file.size}:${file.lastModified}`} className="homework-selected-file">
+                            <span>{file.name}</span>
+                            <button
+                              type="button"
+                              className="download-btn danger"
+                              disabled={homeworkBusy}
+                              onClick={() => setHomeworkFiles(current => current.filter((_, fileIndex) => fileIndex !== index))}
+                            >
+                              {t.auth.removeAttachment}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -78,9 +133,42 @@ export default function HomeworkPage({ model }) {
                                   </span>
                                 )}
                               </div>
+                              {hw.attachments?.length > 0 && (
+                                <div className="homework-attachments">
+                                  <strong>{t.auth.homeworkAttachments}</strong>
+                                  {hw.attachments.map(attachment => (
+                                    <div key={attachment.id} className="homework-attachment-row">
+                                      <span>
+                                        {attachment.filename}
+                                        {attachment.file_size > 0 && (
+                                          <small>{(attachment.file_size / 1024 / 1024).toFixed(2)} MB</small>
+                                        )}
+                                      </span>
+                                      <div className="card-actions">
+                                        <button
+                                          type="button"
+                                          className="download-btn"
+                                          disabled={isActionPending(`homework:attachment:view:${attachment.id}`)}
+                                          onClick={() => handleOpenHomeworkAttachment(hw, attachment, false)}
+                                        >
+                                          {isActionPending(`homework:attachment:view:${attachment.id}`) ? t.auth.opening : t.view}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="download-btn"
+                                          disabled={isActionPending(`homework:attachment:download:${attachment.id}`)}
+                                          onClick={() => handleOpenHomeworkAttachment(hw, attachment, true)}
+                                        >
+                                          {isActionPending(`homework:attachment:download:${attachment.id}`) ? t.auth.downloading : t.download}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                             <div className="homework-card-actions">
-                              {hw.has_attachment && (
+                              {hw.has_attachment && !hw.attachments?.length && (
                                 <button type="button" className="download-btn" disabled={isActionPending(`homework:attachment:${hw.id}`)} aria-busy={isActionPending(`homework:attachment:${hw.id}`)} onClick={() => handleDownloadAttachment(hw)}>
                                   {isActionPending(`homework:attachment:${hw.id}`) ? t.auth.downloading : t.auth.downloadAttachment}
                                 </button>

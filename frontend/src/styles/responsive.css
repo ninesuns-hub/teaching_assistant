@@ -68,6 +68,18 @@
     flex-direction: column-reverse;
   }
 
+  .resource-sort-controls {
+    width: 100%;
+  }
+
+  .resource-sort-controls label {
+    flex: 1;
+  }
+
+  .resource-sort-controls select {
+    width: 100%;
+  }
+
   .scene-dial-wrap {
     display: none;
   }
@@ -154,6 +166,11 @@
   .resource-library-tools {
     width: 100%;
     align-items: stretch;
+  }
+
+  .resource-sort-controls {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .resource-library-tools .upload-btn {

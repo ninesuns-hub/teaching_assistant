@@ -62,3 +62,20 @@ export function getMaterialCategory(material) {
   }
   return 'Notes'
 }
+
+export function sortMaterials(materials, sortBy = 'name', sortDirection = 'asc', language = 'zh') {
+  const multiplier = sortDirection === 'desc' ? -1 : 1
+  const collator = new Intl.Collator(language === 'zh' ? 'zh-CN' : 'en', {
+    numeric: true,
+    sensitivity: 'base',
+  })
+  return [...materials].sort((left, right) => {
+    if (sortBy === 'uploadedAt') {
+      const leftTime = Date.parse(left.uploaded_at || '') || 0
+      const rightTime = Date.parse(right.uploaded_at || '') || 0
+      const timeOrder = leftTime - rightTime
+      if (timeOrder !== 0) return timeOrder * multiplier
+    }
+    return collator.compare(left.filename || '', right.filename || '') * multiplier
+  })
+}
