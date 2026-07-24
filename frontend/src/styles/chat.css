@@ -1,0 +1,819 @@
+/* Chat Section */
+.section-chat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  min-height: 100vh;
+  padding: 80px 20px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.chat-shell {
+  max-width: 800px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  /* 移除之前的 height: 70vh，让它根据内容自动居中 */
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 20;
+  margin-top: 40px; /* 初始状态向下挪动一点 */
+}
+
+.messages-list {
+  width: 100%;
+  /* 初始状态：完全收起 */
+  height: 0;
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-panel);
+  backdrop-filter: blur(10px);
+  border: 1px solid transparent;
+  transition: min-height 0.6s cubic-bezier(0.16, 1, 0.3, 1), padding 0.6s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.messages-list.has-messages {
+  height: 60vh;
+  max-height: 60vh;
+  opacity: 1;
+  padding: 24px;
+  margin-bottom: 24px;
+
+  /* 💡 1. 扁平背景底色 */
+  background: rgba(255, 255, 255, 0.08);
+
+  /* 💡 2. 保持平整的毛玻璃效果 */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+
+  /* 💡 3. 保留清晰的扁平边框，四个方向均匀无光影差异 */
+  border: 1px solid rgba(255, 255, 255, 0.22);
+
+  /* 💡 4. 彻底清空阴影，消除所有立体感、悬浮感和内高光 */
+  box-shadow: none;
+}
+
+.messages-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-control);
+}
+
+.messages-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.message-item {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+}
+
+.message-item.user {
+  align-self: flex-end;
+}
+
+.message-item.assistant {
+  align-self: flex-start;
+}
+
+.message-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.message-feedback-status {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.message-feedback-status.positive {
+  color: #a8ffb0;
+}
+
+.message-feedback-status.negative {
+  color: #ffb0b0;
+}
+
+.welcome-card {
+  width: 100%;
+  padding: 18px 22px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  margin-bottom: 0;
+  color: inherit;
+  line-height: 1.68;
+  text-align: left;
+  font-size: 16px;
+}
+
+.welcome-card .markdown-message {
+  text-align: left;
+}
+
+.welcome-card .markdown-message p {
+  margin-bottom: 14px;
+}
+
+.welcome-card .markdown-message ul,
+.welcome-card .markdown-message ol {
+  margin-bottom: 14px;
+  padding-left: 24px;
+}
+
+.welcome-card .markdown-message li + li {
+  margin-top: 6px;
+}
+
+.feedback-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  opacity: 0.68;
+  transition: background 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.feedback-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.feedback-btn.active {
+  color: #0f3455;
+  background: rgba(255, 255, 255, 0.2);
+  opacity: 1;
+}
+
+.feedback-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.feedback-btn:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-bg);
+}
+
+.thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: currentColor;
+  opacity: 0.72;
+}
+
+.thinking-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.thinking-indicator span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.thinking-indicator span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.thinking-indicator em {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 13px;
+}
+
+@keyframes thinking-pulse {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+
+.message-content {
+  padding: 12px 18px;
+  border-radius: var(--radius-card);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.message-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-image {
+  display: block;
+  max-width: 260px;
+  max-height: 220px;
+  border-radius: var(--radius-control);
+  margin-bottom: 8px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.image-preview-bar {
+  position: relative;
+  display: inline-flex;
+  margin: 0 0 10px 4px;
+}
+
+.image-preview-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--radius-control);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.image-preview-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.composer .attach-image-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background 0.2s;
+}
+
+.composer .attach-image-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+}
+
+.composer .attach-image-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.composer .attach-image-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.user .message-content {
+  background: var(--color-text-primary);
+  color: var(--color-canvas);
+  border-bottom-right-radius: 4px;
+}
+
+.assistant .message-content {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.markdown-message {
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.markdown-message > :first-child {
+  margin-top: 0;
+}
+
+.markdown-message > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-message p,
+.markdown-message ul,
+.markdown-message ol,
+.markdown-message blockquote,
+.markdown-message pre,
+.markdown-message table {
+  margin: 0 0 12px;
+}
+
+.markdown-message h1,
+.markdown-message h2,
+.markdown-message h3,
+.markdown-message h4 {
+  margin: 14px 0 8px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.markdown-message h1 { font-size: 22px; }
+.markdown-message h2 { font-size: 20px; }
+.markdown-message h3 { font-size: 18px; }
+.markdown-message h4 { font-size: 16px; }
+
+.markdown-message ul,
+.markdown-message ol {
+  padding-left: 22px;
+}
+
+.markdown-message li + li {
+  margin-top: 4px;
+}
+
+.markdown-message a {
+  color: #9cc9ff;
+}
+
+.markdown-message blockquote {
+  border-left: 3px solid rgba(255, 255, 255, 0.28);
+  padding-left: 12px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.markdown-message code {
+  border: 1px solid color-mix(in srgb, var(--color-accent) 28%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-text-primary);
+  padding: 2px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.markdown-message pre {
+  overflow-x: auto;
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.32);
+  padding: 14px;
+}
+
+.markdown-message pre code {
+  display: block;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  white-space: pre;
+}
+
+.markdown-message table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+}
+
+.markdown-message th,
+.markdown-message td {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.markdown-message th {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.markdown-message .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+.mermaid-diagram {
+  max-width: 100%;
+  margin: 10px 0 14px;
+  overflow-x: auto;
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-2) 88%, transparent);
+  box-shadow:
+    var(--shadow-panel),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+}
+
+/* Fallback for renderers that retain ReactMarkdown's fenced-code wrapper. */
+.markdown-message pre:has(> .mermaid-diagram) {
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+}
+
+.mermaid-fallback {
+  max-width: 100%;
+  margin: 10px 0 14px;
+  overflow-x: auto;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-surface-2) 88%, transparent);
+  padding: 14px;
+  box-shadow:
+    var(--shadow-panel),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+}
+
+.mermaid-diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  background: transparent !important;
+}
+
+.mermaid-error {
+  margin-bottom: 10px;
+  color: #ffd18a;
+  font-size: 13px;
+}
+
+.composer {
+  width: 100%;
+
+  /* 💡 1. 扁平背景底色 */
+  background: rgba(255, 255, 255, 0.1);
+
+  /* 💡 2. 与聊天框一致的清晰扁平边框 */
+  border: 1px solid rgba(255, 255, 255, 0.22);
+
+  border-radius: var(--radius-panel);
+  padding: 12px 20px;
+  display: flex;
+  gap: 12px;
+
+  /* 💡 3. 保持平整的毛玻璃效果 */
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  overflow: hidden;
+
+  /* 💡 4. 彻底清空阴影，无凸起、无凹陷 */
+  box-shadow: none;
+
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+/* 💡 5. 聚焦时仅微调边框颜色的明暗，依然不加任何阴影 */
+.composer:focus-within {
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.composer textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  resize: none;
+  outline: none;
+  padding: 8px 0;
+  /* 极致隐藏滚动条和所有浏览器原生控件 */
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  overflow: hidden !important;
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE/Edge */
+}
+
+.composer textarea::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.composer button[type="submit"] {
+  background: var(--color-text-primary);
+  color: var(--color-canvas);
+  border: none;
+  border-radius: var(--radius-control);
+  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast);
+}
+
+.composer button[type="submit"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.08);
+}
+
+.composer button[type="submit"]:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.composer button[type="submit"]:disabled,
+.composer .attach-image-btn:disabled {
+  opacity: 1;
+  background: var(--color-disabled-bg);
+  color: var(--color-disabled-text);
+  border: 1px solid var(--color-disabled-border);
+}
+
+/* Semantic chat surfaces */
+.welcome-card,
+.messages-list.has-messages,
+.example-prompt-card,
+.composer {
+  background: var(--color-surface-1);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(var(--backdrop-blur)) saturate(var(--backdrop-saturation));
+}
+
+.welcome-card {
+  background: var(--color-surface-2);
+}
+
+.messages-list.has-messages {
+  background: color-mix(in srgb, var(--color-surface-1) 96%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.example-prompt-card:hover:not(:disabled),
+.composer:focus-within {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+}
+
+.composer:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 20%, transparent), var(--shadow-panel);
+}
+
+.composer textarea {
+  color: var(--color-text-primary);
+}
+
+.composer textarea::placeholder {
+  color: var(--color-placeholder);
+  opacity: 1;
+}
+
+.composer .attach-image-btn {
+  color: var(--color-text-secondary);
+}
+
+.composer button[type="submit"],
+.user .message-content {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.assistant .message-content {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-subtle);
+}
+
+.markdown-message a {
+  color: var(--color-accent);
+}
+
+
+.section-chat {
+  height: 100%;
+  min-height: 0;
+  justify-content: flex-start;
+  padding: 94px var(--page-gutter) 24px;
+}
+
+.chat-shell {
+  width: min(100%, var(--content-max-width));
+  max-width: var(--content-max-width);
+  height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  transition: none;
+}
+
+.chat-shell.empty-chat {
+  max-width: var(--welcome-max-width);
+  justify-content: center;
+  overflow-y: auto;
+  padding: clamp(24px, 6vh, 64px) 0 clamp(28px, 5vh, 56px);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-shell.empty-chat::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-shell.active-chat {
+  justify-content: flex-start;
+}
+
+.active-chat .messages-list.has-messages {
+  flex: 1;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  margin: 0 0 16px;
+  padding: 24px;
+  overscroll-behavior: contain;
+}
+
+.welcome-flow {
+  width: 100%;
+  display: grid;
+  gap: var(--space-4);
+  align-content: center;
+}
+
+.example-prompts {
+  width: 100%;
+  margin-top: var(--space-1);
+}
+
+.example-prompts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 6px;
+  padding: 0 4px;
+  font-size: var(--font-size-control);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.82;
+}
+
+.refresh-examples-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.refresh-examples-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+.example-prompts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.example-prompt-card {
+  min-height: 64px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-card);
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-control);
+  line-height: 1.55;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  backdrop-filter: blur(18px);
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.example-prompt-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.nav-link:focus-visible,
+.refresh-examples-btn:focus-visible,
+.example-prompt-card:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+.composer {
+  flex: 0 0 auto;
+}
+
+.composer-block {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.composer-block--hero {
+  margin: var(--space-2) 0 var(--space-1);
+}
+
+.composer--hero {
+  min-height: 76px;
+  padding: 14px 14px 14px 22px;
+  gap: var(--space-3);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-2);
+  box-shadow: var(--shadow-floating);
+}
+
+.composer--hero textarea {
+  min-height: 46px;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.composer--hero .attach-image-btn {
+  width: 46px;
+  height: 46px;
+}
+
+.composer--hero button[type="submit"] {
+  min-width: 76px;
+  min-height: 46px;
+  padding: 0 22px;
+}
+
+.composer--compact {
+  min-height: 60px;
+}
+
+.composer--hero:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+.composer--hero:focus-within {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-focus) 22%, transparent), var(--shadow-floating);
+}
+
+.welcome-flow .welcome-card {
+  background: var(--color-surface-1);
+  border-color: var(--color-border-subtle);
+  box-shadow: none;
+}
+
+.scene-quote-footer {
+  display: none;
+}

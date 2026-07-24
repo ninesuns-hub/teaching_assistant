@@ -10,12 +10,12 @@ if sys.stdout.encoding != 'utf-8':
 def extract_pptx_text(file_path):
     if not os.path.exists(file_path):
         return f"File not found: {file_path}"
-    
+
     try:
         prs = Presentation(file_path)
     except Exception as e:
         return f"Error loading presentation: {e}"
-        
+
     text_runs = []
     for i, slide in enumerate(prs.slides):
         slide_text = []
@@ -23,7 +23,7 @@ def extract_pptx_text(file_path):
             if hasattr(shape, "text"):
                 slide_text.append(shape.text)
         text_runs.append(f"--- Slide {i+1} ---\n" + "\n".join(slide_text))
-    
+
     return "\n\n".join(text_runs)
 
 if __name__ == "__main__":

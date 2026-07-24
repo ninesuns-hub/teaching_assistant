@@ -1,31 +1,97 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { Children, isValidElement, memo, useEffect, useId, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import mermaid from 'mermaid'
 import 'katex/dist/katex.min.css'
 
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'strict',
-  theme: 'dark',
-  themeVariables: {
-    background: 'transparent',
-    primaryColor: '#202124',
-    primaryTextColor: '#f5f6fa',
-    primaryBorderColor: '#b8bbc6',
-    lineColor: '#c8cbd4',
-    secondaryColor: '#2b2d31',
-    tertiaryColor: '#17181b',
+const MERMAID_SCENE_THEMES = {
+  day: {
+    primaryColor: '#2e6f9e',
+    primaryTextColor: '#f7fbfe',
+    primaryBorderColor: '#245a80',
+    lineColor: '#526d82',
+    secondaryColor: '#dcecf6',
+    secondaryTextColor: '#17324b',
+    tertiaryColor: '#f3f9fc',
+    tertiaryTextColor: '#17324b',
+    edgeLabelBackground: '#f3f9fc',
   },
-})
+  sunset: {
+    primaryColor: '#a2594b',
+    primaryTextColor: '#fff8f4',
+    primaryBorderColor: '#81453b',
+    lineColor: '#6d5559',
+    secondaryColor: '#ead6d3',
+    secondaryTextColor: '#30282a',
+    tertiaryColor: '#f3e8e2',
+    tertiaryTextColor: '#30282a',
+    edgeLabelBackground: '#f3e8e2',
+  },
+  night: {
+    primaryColor: '#91a9ff',
+    primaryTextColor: '#0b1020',
+    primaryBorderColor: '#b7c5ff',
+    lineColor: '#a8b4cc',
+    secondaryColor: '#26304c',
+    secondaryTextColor: '#f2f5fa',
+    tertiaryColor: '#151d34',
+    tertiaryTextColor: '#f2f5fa',
+    edgeLabelBackground: '#151d34',
+  },
+}
 
-function MermaidDiagram({ chart }) {
+let mermaidRenderQueue = Promise.resolve()
+let mermaidModulePromise
+const mermaidRenderCache = new Map()
+const MERMAID_CACHE_LIMIT = 30
+
+function loadMermaid() {
+  if (!mermaidModulePromise) {
+    mermaidModulePromise = import('mermaid').then(module => module.default)
+  }
+  return mermaidModulePromise
+}
+
+function renderMermaidDiagram(diagramId, chart, scene) {
+  const cacheKey = `${scene}\u0000${chart}`
+  const cachedRender = mermaidRenderCache.get(cacheKey)
+  if (cachedRender) return cachedRender
+
+  const themeVariables = MERMAID_SCENE_THEMES[scene] || MERMAID_SCENE_THEMES.night
+  const renderTask = mermaidRenderQueue.then(async () => {
+    const mermaid = await loadMermaid()
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      fontFamily: 'Inter, "Noto Sans SC", "Microsoft YaHei", sans-serif',
+      themeVariables: {
+        background: 'transparent',
+        mainBkg: themeVariables.primaryColor,
+        nodeBorder: themeVariables.primaryBorderColor,
+        clusterBkg: themeVariables.tertiaryColor,
+        clusterBorder: themeVariables.primaryBorderColor,
+        ...themeVariables,
+      },
+    })
+    return mermaid.render(diagramId, chart)
+  })
+
+  mermaidRenderCache.set(cacheKey, renderTask)
+  if (mermaidRenderCache.size > MERMAID_CACHE_LIMIT) {
+    mermaidRenderCache.delete(mermaidRenderCache.keys().next().value)
+  }
+  renderTask.catch(() => mermaidRenderCache.delete(cacheKey))
+  mermaidRenderQueue = renderTask.catch(() => undefined)
+  return renderTask
+}
+
+function MermaidDiagram({ chart, scene }) {
   const reactId = useId()
   const diagramId = useMemo(
-    () => `mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`,
-    [reactId],
+    () => `mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}-${scene}`,
+    [reactId, scene],
   )
   const [svg, setSvg] = useState('')
   const [error, setError] = useState('')
@@ -35,7 +101,7 @@ function MermaidDiagram({ chart }) {
 
     async function renderDiagram() {
       try {
-        const result = await mermaid.render(diagramId, chart)
+        const result = await renderMermaidDiagram(diagramId, chart, scene)
         if (!cancelled) {
           setSvg(result.svg)
           setError('')
@@ -53,7 +119,7 @@ function MermaidDiagram({ chart }) {
     return () => {
       cancelled = true
     }
-  }, [chart, diagramId])
+  }, [chart, diagramId, scene])
 
   if (error) {
     return (
@@ -72,13 +138,13 @@ function MermaidDiagram({ chart }) {
   )
 }
 
-function MarkdownCode({ inline, className, children, ...props }) {
+function MarkdownCode({ inline, className, children, scene, ...props }) {
   const languageMatch = /language-(\w+)/.exec(className || '')
   const language = languageMatch?.[1]
   const code = String(children).replace(/\n$/, '')
 
   if (!inline && language === 'mermaid') {
-    return <MermaidDiagram chart={code} />
+    return <MermaidDiagram chart={code} scene={scene} />
   }
 
   return (
@@ -86,6 +152,17 @@ function MarkdownCode({ inline, className, children, ...props }) {
       {children}
     </code>
   )
+}
+
+function MarkdownPre({ children, ...props }) {
+  const child = Children.toArray(children)[0]
+  const className = isValidElement(child) ? child.props.className || '' : ''
+
+  if (/\blanguage-mermaid\b/.test(className)) {
+    return <>{children}</>
+  }
+
+  return <pre {...props}>{children}</pre>
 }
 
 function normalizeMathContent(content) {
@@ -131,20 +208,29 @@ function normalizeMathContent(content) {
   return text
 }
 
-export default function MarkdownMessage({ content }) {
+function MarkdownMessage({ content, scene = 'night' }) {
   const normalized = useMemo(() => normalizeMathContent(content), [content])
+  const markdownComponents = useMemo(
+    () => ({
+      code: function SceneMarkdownCode(props) {
+        return <MarkdownCode {...props} scene={scene} />
+      },
+      pre: MarkdownPre,
+    }),
+    [scene],
+  )
 
   return (
     <div className="markdown-message">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
-        components={{
-          code: MarkdownCode,
-        }}
+        components={markdownComponents}
       >
         {normalized}
       </ReactMarkdown>
     </div>
   )
 }
+
+export default memo(MarkdownMessage)

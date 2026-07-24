@@ -51,7 +51,7 @@ def init_collection():
     client = get_qdrant_client()
     collections = client.get_collections().collections
     exists = any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections)
-    
+
     if not exists:
         logger.info(f"创建 Qdrant 集合: {settings.QDRANT_COLLECTION_NAME}")
         client.create_collection(
@@ -74,10 +74,10 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
 
     init_collection()
     client = get_qdrant_client()
-    
+
     texts = [c["text"] for c in chunks]
     embeddings = _embed(texts)
-    
+
     points = []
     for i, chunk in enumerate(chunks):
         # 统一元数据格式
@@ -89,7 +89,7 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
             "page": str(chunk.get("page", "")),
             "metadata": chunk.get("metadata", {}) # 额外元数据
         }
-        
+
         points.append(models.PointStruct(
             id=str(uuid.uuid4()),
             vector=embeddings[i],
@@ -107,9 +107,9 @@ def query(question: str, source_type: str = None, top_k: int = None) -> List[Dic
     embeddings = _embed([question])
     if not embeddings:
         return []
-    
+
     n_results = top_k if top_k is not None else settings.TOP_K
-    
+
     # 构造过滤器
     query_filter = None
     if source_type:
@@ -135,5 +135,5 @@ def query(question: str, source_type: str = None, top_k: int = None) -> List[Dic
         res = hit.payload
         res["similarity"] = round(hit.score, 3)
         output.append(res)
-        
+
     return output

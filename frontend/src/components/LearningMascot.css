@@ -8,8 +8,8 @@
 
 .learning-mascot-button {
   position: relative;
-  width: 150px;
-  height: 210px;
+  width: 180px;
+  height: 252px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -19,7 +19,7 @@
   color: var(--text-main);
   cursor: pointer;
   pointer-events: auto;
-  transition: transform 180ms ease;
+  transition: transform 140ms ease;
 }
 
 .learning-mascot-button:hover,
@@ -31,8 +31,8 @@
 .learning-mascot-button img {
   position: relative;
   z-index: 2;
-  width: 146px;
-  max-height: 210px;
+  width: 175px;
+  max-height: 252px;
   object-fit: contain;
   object-position: center bottom;
   filter: drop-shadow(0 12px 13px rgba(47, 27, 21, 0.22));
@@ -40,10 +40,10 @@
 
 .learning-mascot-ground {
   position: absolute;
-  left: 22px;
+  left: 25px;
   bottom: 2px;
-  width: 108px;
-  height: 23px;
+  width: 130px;
+  height: 27px;
   border-radius: 50%;
   background: rgba(61, 35, 27, 0.16);
   filter: blur(8px);
@@ -51,8 +51,8 @@
 
 .learning-mascot-label {
   position: absolute;
-  right: 108px;
-  bottom: 28px;
+  right: 130px;
+  bottom: 34px;
   z-index: 4;
   width: max-content;
   padding: 8px 12px;
@@ -78,8 +78,8 @@
 .learning-mascot-badge {
   position: absolute;
   z-index: 5;
-  right: 12px;
-  top: 38px;
+  right: 14px;
+  top: 45px;
   width: 11px;
   height: 11px;
   border: 3px solid rgba(255, 247, 233, 0.95);
@@ -96,7 +96,7 @@
 .learning-assistant-panel {
   position: absolute;
   right: 10px;
-  bottom: 196px;
+  bottom: 234px;
   width: min(370px, calc(100vw - 30px));
   max-height: min(620px, calc(100vh - 120px));
   overflow: auto;
@@ -110,7 +110,7 @@
   backdrop-filter: blur(20px);
   pointer-events: auto;
   transform-origin: bottom right;
-  animation: learning-panel-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: learning-panel-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
   scrollbar-width: thin;
   scrollbar-color: rgba(99, 72, 59, 0.24) transparent;
 }
@@ -200,7 +200,7 @@
 .learning-assistant-letter p {
   margin: 0;
   color: #584942;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.75;
 }
 
@@ -218,7 +218,7 @@
   border-radius: 12px;
   background: rgba(188, 137, 91, 0.1);
   color: #7a6256;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -248,7 +248,7 @@
   color: #fffaf3;
   box-shadow: 0 8px 18px rgba(125, 70, 49, 0.14);
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 680;
   cursor: pointer;
   transition: background 160ms ease, transform 160ms ease, opacity 160ms ease;
@@ -260,7 +260,10 @@
 }
 
 .learning-primary-action:disabled {
-  opacity: 0.42;
+  opacity: 1;
+  background: #ded0cb;
+  border-color: #aa9490;
+  color: #654d52;
   cursor: not-allowed;
   box-shadow: none;
 }
@@ -272,7 +275,7 @@
   background: transparent;
   color: #8b6454;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -285,7 +288,7 @@
   justify-content: center;
   gap: 5px;
   color: #8b7569;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .learning-assistant-loading i {
@@ -310,7 +313,7 @@
 .learning-student-signals h3 {
   margin: 0 0 4px;
   color: #947b6d;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -334,9 +337,9 @@
 }
 
 .learning-student-signals button span { min-width: 0; }
-.learning-student-signals strong { display: block; color: #4a3c36; font-size: 13px; }
-.learning-student-signals small { color: #998278; font-size: 11px; }
-.learning-student-signals em { flex: 0 0 auto; color: #a18c81; font-size: 11px; font-style: normal; }
+.learning-student-signals strong { display: block; color: #4a3c36; font-size: 15px; }
+.learning-student-signals small { color: #775f55; font-size: 13px; }
+.learning-student-signals em { flex: 0 0 auto; color: #72594e; font-size: 13px; font-style: normal; }
 .learning-student-signals em.has-report { color: #a55f48; }
 
 .learning-drawer-layer {
@@ -368,15 +371,15 @@
 @keyframes learning-drawer-in { from { transform: translateX(35px); opacity: 0; } }
 
 .learning-drawer-header { align-items: flex-start; justify-content: space-between; }
-.learning-drawer-header > div > span { display: block; margin-bottom: 7px; color: #b36f54; font-size: 12px; }
+.learning-drawer-header > div > span { display: block; margin-bottom: 7px; color: #9b543e; font-size: 13px; }
 .learning-drawer-header h2 { font-size: clamp(23px, 3vw, 30px); }
-.learning-drawer-meta { display: flex; flex-wrap: wrap; gap: 9px; margin: 18px 0 28px; color: #9b8479; font-size: 12px; }
+.learning-drawer-meta { display: flex; flex-wrap: wrap; gap: 9px; margin: 18px 0 28px; color: #715b51; font-size: 13px; }
 .learning-drawer-meta span { padding: 6px 10px; border-radius: 999px; background: rgba(132, 91, 70, 0.07); }
 .learning-report-drawer section { margin-top: 28px; }
-.learning-report-drawer h3 { margin: 0 0 12px; color: #a35f48; font-size: 14px; letter-spacing: 0.02em; }
+.learning-report-drawer h3 { margin: 0 0 12px; color: #914d39; font-size: 15px; letter-spacing: 0.02em; }
 .learning-report-summary > div { white-space: pre-wrap; color: #584942; font-size: 15px; line-height: 1.9; }
 .learning-tag-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.learning-tag-list span { padding: 7px 11px; border: 1px solid rgba(163, 95, 72, 0.13); border-radius: 999px; background: rgba(184, 113, 84, 0.07); color: #805443; font-size: 12px; }
+.learning-tag-list span { padding: 7px 11px; border: 1px solid rgba(163, 95, 72, 0.13); border-radius: 999px; background: rgba(184, 113, 84, 0.07); color: #805443; font-size: 13px; }
 .learning-insight-block ul,
 .learning-insight-block ol { margin: 0; padding-left: 22px; color: #635048; line-height: 1.8; }
 .learning-insight-block li + li { margin-top: 8px; }
@@ -384,15 +387,19 @@
 
 @media (max-width: 1180px) {
   .learning-mascot-shell { right: 7px; }
-  .learning-mascot-button { width: 118px; height: 168px; }
-  .learning-mascot-button img { width: 114px; max-height: 168px; }
-  .learning-assistant-panel { right: 5px; bottom: 158px; }
+  .learning-mascot-button { width: 142px; height: 202px; }
+  .learning-mascot-button img { width: 137px; max-height: 202px; }
+  .learning-mascot-ground { left: 20px; width: 102px; height: 22px; }
+  .learning-mascot-label { right: 102px; bottom: 26px; }
+  .learning-mascot-badge { right: 9px; top: 31px; }
+  .learning-assistant-panel { right: 5px; bottom: 190px; }
 }
 
 @media (max-width: 700px) {
   .learning-mascot-shell { right: 5px; bottom: max(70px, env(safe-area-inset-bottom)); }
-  .learning-mascot-button { width: 88px; height: 116px; }
-  .learning-mascot-button img { width: 85px; max-height: 116px; }
+  .learning-mascot-button { width: 106px; height: 139px; }
+  .learning-mascot-button img { width: 102px; max-height: 139px; }
+  .learning-mascot-ground { left: 15px; width: 76px; height: 18px; }
   .learning-mascot-label { display: none; }
   .learning-mascot-badge { right: 3px; top: 15px; }
   .learning-assistant-panel {

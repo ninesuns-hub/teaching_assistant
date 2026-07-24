@@ -1,0 +1,274 @@
+/* Background Layers */
+.scene-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background-color: var(--bg-main);
+  background-image: var(--sky-core);
+  pointer-events: none;
+  transition: opacity 0.1s linear;
+  visibility: hidden;
+}
+
+.scene-layer.is-visible {
+  visibility: visible;
+  will-change: opacity;
+}
+
+.scene-layer:not(.is-visible) .scene-halo,
+.scene-layer:not(.is-visible) .scene-motion,
+.scene-layer:not(.is-visible) .scene-motion-secondary,
+.scene-layer:not(.is-visible) .scene-meteor,
+.scene-layer:not(.is-visible) .scene-meteor::before {
+  animation-play-state: paused;
+}
+
+.scene-layer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--sky-overlay), var(--sky-detail);
+  opacity: 0.92;
+}
+
+.scene-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    var(--scene-edge-light),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='.62'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, repeat;
+  background-size: cover, 180px 180px;
+  mix-blend-mode: soft-light;
+  opacity: var(--scene-texture-opacity, 0.1);
+  pointer-events: none;
+}
+
+/* Scene Definitions */
+.scene-day {
+  --bg-main: #72b9e4;
+  --text-main: #15304d;
+  --sky-core: linear-gradient(
+    180deg,
+    #327fc4 0%,
+    #4f9bd2 24%,
+    #76b6df 50%,
+    #acd5ea 72%,
+    #dcecf3 88%,
+    #f4f7f5 100%
+  );
+  --sky-overlay:
+    radial-gradient(circle at 82% 15%, rgba(255, 250, 228, 0.68) 0%, rgba(255, 253, 240, 0.2) 9%, transparent 25%),
+    radial-gradient(ellipse at 18% 28%, rgba(235, 248, 255, 0.15) 0%, transparent 28%),
+    linear-gradient(180deg, transparent 62%, rgba(243, 250, 252, 0.1) 78%, rgba(255, 255, 255, 0.3) 100%);
+  --sky-detail: none;
+  --halo-primary: radial-gradient(circle at 82% 16%, rgba(255, 249, 223, 0.72) 0%, rgba(244, 251, 255, 0.18) 34%, transparent 68%);
+  --scene-edge-light: radial-gradient(ellipse at 50% 48%, transparent 58%, rgba(32, 79, 115, 0.11) 100%);
+  --scene-texture-opacity: 0.08;
+}
+
+.scene-sunset {
+  --bg-main: #8ea3b7;
+  --text-main: #2d2629;
+
+  --sky-core: linear-gradient(
+    180deg,
+    #8ea3b7 0%,
+    #a8acb3 15%,
+    #c1b4b1 30%,
+    #d8aa93 45%,
+    #e39d7e 60%,
+    #e8b9aa 75%,
+    #edc9c2 90%,
+    #ead6d3 100%
+  );
+
+  --sky-overlay:
+    radial-gradient(ellipse at 50% 55%, rgba(225, 166, 139, 0.2) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 10%, rgba(142, 163, 183, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 92%, rgba(255, 248, 245, 0.34) 0%, transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
+
+  --sky-detail: none;
+
+  --halo-primary: radial-gradient(circle at 50% 50%, rgba(216, 170, 147, 0.25), transparent 75%);
+  --scene-edge-light: radial-gradient(ellipse at center, transparent 56%, rgba(91, 70, 76, 0.07) 100%);
+  --scene-texture-opacity: 0.08;
+}
+
+.scene-night {
+  --bg-main: #050918;
+  --text-main: #f1f4fb;
+  --sky-core:
+    radial-gradient(ellipse 78% 58% at 72% 4%, rgba(67, 96, 181, 0.34) 0%, transparent 58%),
+    radial-gradient(ellipse 72% 62% at 18% 92%, rgba(92, 60, 148, 0.28) 0%, transparent 60%),
+    radial-gradient(ellipse 52% 42% at 52% 48%, rgba(44, 67, 137, 0.16) 0%, transparent 72%),
+    linear-gradient(180deg, #111c3d 0%, #0a1230 35%, #070c21 70%, #040714 100%);
+  --sky-overlay: none;
+  --sky-detail: none;
+  --halo-primary: radial-gradient(circle at 52% 43%, rgba(103, 132, 232, 0.3) 0%, rgba(72, 88, 176, 0.12) 38%, transparent 70%);
+  --scene-edge-light: radial-gradient(ellipse at 50% 46%, transparent 58%, rgba(1, 3, 13, 0.2) 100%);
+  --scene-texture-opacity: 0.07;
+}
+
+/* Dense, static dust forms the farthest plane of the night sky. */
+.scene-night::before {
+  background-image:
+    linear-gradient(128deg, transparent 17%, rgba(91, 118, 205, 0.07) 34%, rgba(135, 100, 186, 0.09) 47%, rgba(73, 101, 183, 0.06) 59%, transparent 76%),
+    radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.72) 0 0.55px, transparent 0.95px),
+    radial-gradient(circle at 72% 64%, rgba(211, 226, 255, 0.62) 0 0.5px, transparent 0.9px),
+    radial-gradient(circle at 42% 78%, rgba(255, 244, 226, 0.54) 0 0.45px, transparent 0.85px),
+    radial-gradient(circle at 84% 18%, rgba(228, 235, 255, 0.66) 0 0.6px, transparent 1px);
+  background-position: center, 0 0, 31px 19px, 67px 43px, 13px 71px;
+  background-repeat: no-repeat, repeat, repeat, repeat, repeat;
+  background-size: cover, 133px 155px, 199px 182px, 257px 228px, 331px 279px;
+  opacity: 0.88;
+}
+
+/* Dynamic Elements */
+.scene-halo {
+  position: absolute;
+  inset: -20%;
+  z-index: -1;
+  background: var(--halo-primary);
+  opacity: 0.7;
+  filter: blur(30px);
+  animation: halo-breathe 10s ease-in-out infinite;
+}
+
+.scene-motion {
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+}
+
+.scene-day .scene-motion {
+  background:
+    radial-gradient(ellipse 38% 48% at 24% 34%, rgba(255,255,255,0.84) 0%, rgba(245,251,255,0.36) 44%, transparent 70%),
+    radial-gradient(ellipse 26% 34% at 34% 42%, rgba(255,255,255,0.6) 0%, transparent 62%),
+    radial-gradient(ellipse 42% 38% at 75% 25%, rgba(255,255,255,0.78) 0%, rgba(240,249,255,0.26) 46%, transparent 72%),
+    radial-gradient(ellipse 28% 32% at 67% 20%, rgba(255,255,255,0.52) 0%, transparent 60%);
+  filter: blur(24px);
+  opacity: 0.68;
+  animation: cloud-drift 48s ease-in-out infinite alternate;
+}
+
+/* Softer, slower clouds create a separate far plane. */
+.scene-day .scene-motion-secondary {
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 38% 30% at 14% 64%, rgba(238,249,255,0.42) 0%, transparent 68%),
+    radial-gradient(ellipse 48% 32% at 86% 58%, rgba(242,250,255,0.36) 0%, transparent 70%),
+    radial-gradient(ellipse 34% 24% at 54% 76%, rgba(255,255,255,0.3) 0%, transparent 66%);
+  filter: blur(54px);
+  opacity: 0.42;
+  animation: cloud-drift-far 88s ease-in-out infinite alternate;
+}
+
+.scene-sunset .scene-motion {
+  background:
+    /* 上部灰蓝云雾 */
+    radial-gradient(ellipse at 35% 20%, rgba(142, 163, 183, 0.16) 0, transparent 55%),
+    /* 中部杏粉暖霞 */
+    radial-gradient(ellipse at 65% 50%, rgba(225, 170, 140, 0.20) 0, transparent 50%),
+    /* 下部极淡的轻柔珊瑚红余晖 */
+    radial-gradient(ellipse at 40% 82%, rgba(224, 177, 167, 0.07) 0, transparent 48%);
+
+  filter: blur(60px);
+  animation: sunset-flow 28s ease-in-out infinite alternate;
+}
+
+.scene-night .scene-motion {
+  background:
+    radial-gradient(circle at 17% 22%, rgba(255,255,255,0.98) 0 1.25px, rgba(194,214,255,0.32) 1.6px, transparent 3.2px),
+    radial-gradient(circle at 76% 34%, rgba(221,232,255,0.94) 0 1.05px, rgba(153,182,255,0.26) 1.5px, transparent 3px),
+    radial-gradient(circle at 42% 78%, rgba(255,246,225,0.9) 0 1.15px, rgba(255,220,164,0.2) 1.5px, transparent 3.1px),
+    radial-gradient(circle at 88% 82%, rgba(255,255,255,0.9) 0 0.9px, transparent 2.5px);
+  background-position: 0 0, 43px 71px, 91px 13px, 127px 97px;
+  background-repeat: repeat;
+  background-size: 479px 417px, 579px 496px, 663px 560px, 751px 622px;
+  filter: drop-shadow(0 0 3px rgba(154, 184, 255, 0.22));
+  opacity: 0.78;
+  animation: night-stars-near 42s ease-in-out infinite alternate;
+}
+
+/* Mid-distance stars and a restrained diagonal nebula establish depth. */
+.scene-night .scene-motion-secondary {
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 58% 18% at 34% 40%, rgba(91, 124, 216, 0.2) 0%, rgba(101, 86, 175, 0.09) 46%, transparent 72%),
+    radial-gradient(ellipse 48% 15% at 66% 57%, rgba(153, 104, 199, 0.15) 0%, transparent 70%),
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.88) 0 0.75px, transparent 1.35px),
+    radial-gradient(circle at 64% 22%, rgba(214,228,255,0.82) 0 0.65px, transparent 1.25px),
+    radial-gradient(circle at 82% 44%, rgba(255,255,255,0.9) 0 0.8px, transparent 1.45px),
+    radial-gradient(circle at 38% 62%, rgba(226,233,255,0.78) 0 0.65px, transparent 1.2px);
+  background-position: center, center, 0 0, 37px 61px, 83px 29px, 113px 97px;
+  background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat;
+  background-size: cover, cover, 277px 257px, 345px 306px, 423px 357px, 484px 411px;
+  opacity: 0.7;
+  animation: night-stars-mid 74s ease-in-out infinite alternate;
+}
+
+.scene-meteor {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+
+.scene-meteor::before {
+  content: '';
+  position: absolute;
+  width: 200px;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.85) 78%, #fff);
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.7));
+  transform: rotate(35deg);
+  top: -10%;
+  left: 15%;
+  animation: meteor-run 5s linear infinite;
+}
+
+/* Keyframes */
+@keyframes halo-breathe {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.6; }
+  50% { transform: scale(1.15) rotate(5deg); opacity: 0.8; }
+}
+
+@keyframes cloud-drift {
+  from { transform: translate(-6%, -1.5%) scale(1); }
+  to   { transform: translate(7%, 1.5%) scale(1.06); }
+}
+
+@keyframes cloud-drift-far {
+  from { transform: translate(6%, 1%) scale(1.04); }
+  to   { transform: translate(-6%, -1%) scale(1); }
+}
+
+@keyframes sunset-flow {
+  from { transform: scale(1) translate(-2%, -2%); opacity: 0.82; }
+  to { transform: scale(1.1) translate(2%, 2%); opacity: 1; }
+}
+
+@keyframes night-stars-near {
+  0% { transform: translate3d(-1.2%, -0.5%, 0) scale(1); opacity: 0.68; }
+  48% { opacity: 0.94; }
+  100% { transform: translate3d(1.5%, 0.8%, 0) scale(1.015); opacity: 0.8; }
+}
+
+@keyframes night-stars-mid {
+  0% { transform: translate3d(0.8%, 0.3%, 0) scale(1.01); opacity: 0.68; }
+  52% { opacity: 0.84; }
+  100% { transform: translate3d(-1%, -0.5%, 0) scale(1); opacity: 0.74; }
+}
+
+@keyframes meteor-run {
+  0% { transform: translate(-200px, -200px) rotate(35deg); opacity: 0; }
+  5% { opacity: 1; }
+  15% { transform: translate(100vw, 100vh) rotate(35deg); opacity: 0; }
+  100% { transform: translate(100vw, 100vh) rotate(35deg); opacity: 0; }
+}

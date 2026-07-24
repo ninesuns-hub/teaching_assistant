@@ -7,7 +7,7 @@ from database.mysql_db import get_db, User
 from database import conversation_repo
 from app.core.deps import get_current_user
 from app.core.chat_image_store import image_url_for_path
-from .schemas import ConversationResponse, ChatMessageResponse, ChatRequest, MessageFeedbackRequest
+from .schemas import ConversationResponse, ChatMessageResponse, ChatRequest, MessageFeedbackRequest, RenameConversationRequest
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ def list_conversations(
     conversations = conversation_repo.list_user_conversations(db, current_user.id)
     return [
         ConversationResponse(
-            id=c.id,
+            id=c.public_id,
             title=c.title,
             class_id=c.class_id,
             created_at=c.created_at.isoformat(),
@@ -38,7 +38,7 @@ def create_conversation(
 ):
     conversation = conversation_repo.create_conversation(db, current_user.id, class_id)
     return ConversationResponse(
-        id=conversation.id,
+        id=conversation.public_id,
         title=conversation.title,
         class_id=conversation.class_id,
         created_at=conversation.created_at.isoformat(),
@@ -46,16 +46,16 @@ def create_conversation(
     )
 
 
-@router.get("/{conversation_id}/messages", response_model=list[ChatMessageResponse])
+@router.get("/{public_id}/messages", response_model=list[ChatMessageResponse])
 def get_conversation_messages(
-    conversation_id: int,
+    public_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    conversation = conversation_repo.get_conversation(db, conversation_id, current_user.id)
+    conversation = conversation_repo.get_conversation(db, public_id, current_user.id)
     if not conversation:
         raise HTTPException(status_code=404, detail="会话不存在")
-    messages = conversation_repo.list_messages(db, conversation_id)
+    messages = conversation_repo.list_messages(db, conversation.id)
     return [
         ChatMessageResponse(
             id=m.id,
@@ -69,35 +69,54 @@ def get_conversation_messages(
     ]
 
 
-@router.post("/{conversation_id}/messages/{message_id}/feedback")
+@router.post("/{public_id}/messages/{message_id}/feedback")
 def set_message_feedback(
-    conversation_id: int,
+    public_id: str,
     message_id: int,
     payload: MessageFeedbackRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    conversation = conversation_repo.get_conversation(db, conversation_id, current_user.id)
+    conversation = conversation_repo.get_conversation(db, public_id, current_user.id)
     if not conversation:
         raise HTTPException(status_code=404, detail="会话不存在")
 
     if payload.feedback_type not in {"positive", "negative", None}:
         raise HTTPException(status_code=400, detail="无效的反馈类型")
 
-    message = conversation_repo.update_message_feedback(db, conversation_id, message_id, payload.feedback_type)
+    message = conversation_repo.update_message_feedback(db, conversation.id, message_id, payload.feedback_type)
     if not message:
         raise HTTPException(status_code=404, detail="没有可反馈的助手消息")
 
     return {"ok": True, "feedback_type": message.feedback_type}
 
 
-@router.delete("/{conversation_id}")
-def delete_conversation(
-    conversation_id: int,
+@router.patch("/{public_id}", response_model=ConversationResponse)
+def rename_conversation(
+    public_id: str,
+    payload: RenameConversationRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    deleted = conversation_repo.delete_conversation(db, conversation_id, current_user.id)
+    conversation = conversation_repo.rename_conversation(db, public_id, current_user.id, payload.title)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return ConversationResponse(
+        id=conversation.public_id,
+        title=conversation.title,
+        class_id=conversation.class_id,
+        created_at=conversation.created_at.isoformat(),
+        updated_at=conversation.updated_at.isoformat() if conversation.updated_at else conversation.created_at.isoformat(),
+    )
+
+
+@router.delete("/{public_id}")
+def delete_conversation(
+    public_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    deleted = conversation_repo.delete_conversation(db, public_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"ok": True}

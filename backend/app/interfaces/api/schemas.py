@@ -3,7 +3,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 class ChatRequest(BaseModel):
     message: str = ""
-    conversation_id: int | None = None
+    conversation_id: str | None = None
     class_id: int | None = None
     image_base64: str | None = None
     image_mime: str | None = None
@@ -114,11 +114,25 @@ class MaterialResponse(BaseModel):
 
 
 class ConversationResponse(BaseModel):
-    id: int
+    id: str
     title: str
     class_id: int | None
     created_at: str
     updated_at: str
+
+
+class RenameConversationRequest(BaseModel):
+    title: str
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        title = value.strip()
+        if not title:
+            raise ValueError("会话标题不能为空")
+        if len(title) > 50:
+            raise ValueError("会话标题不能超过 50 个字符")
+        return title
 
 
 class ChatMessageResponse(BaseModel):

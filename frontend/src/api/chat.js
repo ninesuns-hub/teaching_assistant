@@ -39,15 +39,16 @@ export async function sendChatMessage(payload, onChunk) {
     if (onChunk) onChunk(chunk)
   }
 
-  return conversationId ? Number(conversationId) : null
+  return conversationId || null
 }
 
-export async function sendWelcomeMessage(classId, onChunk) {
+export async function sendWelcomeMessage(classId, onChunk, signal) {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
   const token = getToken()
   const query = classId ? `?class_id=${classId}` : ''
   const response = await fetch(`${API_BASE_URL}/api/chat/welcome${query}`, {
     method: 'POST',
+    signal,
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },

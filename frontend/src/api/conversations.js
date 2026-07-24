@@ -17,6 +17,13 @@ export async function deleteConversation(conversationId) {
   return request(`/api/conversations/${conversationId}`, { method: 'DELETE' })
 }
 
+export async function renameConversation(conversationId, title) {
+  return request(`/api/conversations/${conversationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
+  })
+}
+
 export async function submitConversationFeedback(conversationId, messageId, feedbackType) {
   return request(`/api/conversations/${conversationId}/messages/${messageId}/feedback`, {
     method: 'POST',

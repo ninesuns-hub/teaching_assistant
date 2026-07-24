@@ -43,7 +43,7 @@ class DataManager:
 
             if auto_ingest:
                 self.ingest_file(target_path)
-            
+
             return {"status": "success", "path": target_path}
         except Exception as e:
             logger.error(f"保存文件失败: {e}")
@@ -101,7 +101,7 @@ class DataManager:
         logger.info(f"开始处理文件入库: {file_path}")
         ext = file_path.lower()
         chunks = []
-        
+
         if ext.endswith((".pptx", ".ppsx")):
             chunks = self.processor.pptx_parser.parse(file_path)
         elif ext.endswith(".pdf"):

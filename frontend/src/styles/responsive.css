@@ -1,0 +1,209 @@
+@media (max-width: 900px) {
+  .topbar {
+    height: 112px;
+    padding: 8px var(--page-gutter) 52px;
+  }
+
+  .topbar-inner {
+    gap: var(--space-3);
+  }
+
+  .topbar-left {
+    gap: 12px;
+  }
+
+  .topbar-nav {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 6px;
+    display: flex;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .topbar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-link {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+  }
+
+  .user-badge {
+    display: none;
+  }
+
+  .section-chat {
+    padding: 124px var(--page-gutter) 14px;
+  }
+
+  .section-resources,
+  .section-homework,
+  .section-resources.section-teacher {
+    padding: 140px 16px 40px;
+  }
+
+  .resources-header {
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .student-class-context {
+    grid-template-columns: 1fr;
+  }
+
+  .student-class-context-actions {
+    justify-content: flex-start;
+  }
+
+  .resource-library-header {
+    align-items: flex-start;
+  }
+
+  .resource-library-tools {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+  }
+
+  .scene-dial-wrap {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .auth-modal {
+    width: calc(100% - 24px);
+    max-height: calc(100dvh - 24px);
+    padding: 32px 24px;
+    overflow-y: auto;
+  }
+
+  .modal-close {
+    top: 16px;
+    right: 16px;
+  }
+
+  .auth-form {
+    gap: 16px;
+  }
+
+  .brand-text {
+    display: none;
+  }
+
+  .topbar-actions {
+    gap: 2px;
+  }
+
+  .topbar-actions .ghost-btn,
+  .topbar-actions .solid-btn {
+    padding: 7px 10px;
+  }
+
+  .chat-shell.empty-chat {
+    justify-content: flex-start;
+    padding-top: 12px;
+  }
+
+  .example-prompts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .example-prompt-card {
+    min-height: 0;
+  }
+
+  .active-chat .messages-list.has-messages {
+    padding: 16px 12px;
+  }
+
+  .composer {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .composer--hero {
+    min-height: 64px;
+    padding-left: 16px;
+  }
+
+  .composer--hero textarea {
+    min-height: 40px;
+    font-size: 16px;
+  }
+
+  .composer--hero .attach-image-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .welcome-flow {
+    gap: 12px;
+  }
+
+  .resources-header,
+  .resource-library-header,
+  .student-join-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resource-library-tools {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .resource-library-tools .upload-btn {
+    width: 100%;
+  }
+
+  .student-class-context {
+    gap: var(--space-5);
+    padding: var(--space-5);
+  }
+
+  .student-class-context-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .student-class-picker {
+    min-width: 0;
+  }
+
+  .student-class-picker select,
+  .student-class-context-actions .action-btn,
+  .student-join-form .action-btn {
+    width: 100%;
+  }
+
+  .student-join-panel {
+    padding-top: var(--space-5);
+  }
+
+  .resource-library-header {
+    margin-top: 28px;
+  }
+
+  .resource-library-header .filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .resource-library-header .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .resources-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .composer button[type="submit"] {
+    padding: 0 14px;
+  }
+}
