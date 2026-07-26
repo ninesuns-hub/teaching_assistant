@@ -1,7 +1,7 @@
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -124,6 +124,30 @@ def get_user_assistant_message(
         )
         .first()
     )
+
+
+def get_user_assistant_message_for_update(
+    db: Session,
+    public_id: str,
+    message_id: int,
+    user_id: int,
+) -> Optional[ChatMessage]:
+    return (
+        db.query(ChatMessage)
+        .join(Conversation, ChatMessage.conversation_id == Conversation.id)
+        .filter(
+            Conversation.public_id == public_id,
+            Conversation.user_id == user_id,
+            ChatMessage.id == message_id,
+            ChatMessage.role == "assistant",
+        )
+        .with_for_update()
+        .first()
+    )
+
+
+def current_utc_time() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def update_message_feedback(

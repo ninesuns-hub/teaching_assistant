@@ -30,6 +30,26 @@ class MermaidRepairResponse(BaseModel):
     source: str
 
 
+class MermaidRepairCommitRequest(BaseModel):
+    conversation_id: str
+    message_id: int
+    original_source: str = Field(min_length=1, max_length=12000)
+    repaired_source: str = Field(min_length=1, max_length=12000)
+
+    @field_validator("original_source", "repaired_source")
+    @classmethod
+    def reject_nested_fences(cls, value: str):
+        source = value.strip()
+        if "```" in source:
+            raise ValueError("Mermaid 源码不能包含 fenced code block")
+        return source
+
+
+class MermaidRepairCommitResponse(BaseModel):
+    source: str
+    content: str
+
+
 class SendCodeRequest(BaseModel):
     email: str
 

@@ -4,7 +4,7 @@ import { AuthImage, MessageActionIcon } from '../components/chat/MessageParts'
 import SceneSwitcher from '../components/scenes/SceneSwitcher'
 
 export default function ChatPage({ model }) {
-  const { SCENE_OPTIONS, activeQuote, activeSceneKey, canChat, chatOpacity, chatPlaceholder, composerInputRef, conversationId, conversationLoading, dialRotation, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMessagesScroll, handleMouseDown, handlePickImage, handleRefreshExamples, handleSceneSelect, handleSend, imageInputRef, input, isDragging, isSending, language, messages, messagesEndRef, messagesListRef, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
+  const { SCENE_OPTIONS, activeQuote, activeSceneKey, canChat, chatOpacity, chatPlaceholder, composerInputRef, conversationId, conversationLoading, dialRotation, handleAssistantContentUpdate, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMessagesScroll, handleMouseDown, handlePickImage, handleRefreshExamples, handleSceneSelect, handleSend, imageInputRef, input, isDragging, isSending, language, messages, messagesEndRef, messagesListRef, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
   const statusLabels = {
     understanding: t.chatUnderstanding,
     retrieving: t.chatRetrieving,
@@ -100,6 +100,7 @@ export default function ChatPage({ model }) {
                           scene={activeSceneKey}
                           conversationId={conversationId}
                           messageId={message.id}
+                          onContentUpdate={handleAssistantContentUpdate}
                           labels={t}
                         />
                       ) : <p className="message-text">{message.content}</p>

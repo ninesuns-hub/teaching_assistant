@@ -119,3 +119,11 @@ export function repairMermaidDiagram(payload) {
     timeoutMs: 60_000,
   })
 }
+
+export function commitMermaidRepair(payload) {
+  return request('/api/chat/mermaid/repair/commit', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    timeoutMs: 20_000,
+  })
+}

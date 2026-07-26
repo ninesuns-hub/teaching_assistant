@@ -1,10 +1,10 @@
-import { Children, isValidElement, memo, useEffect, useId, useMemo, useState } from 'react'
+import { Children, isValidElement, memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
-import { repairMermaidDiagram } from '../api/chat'
+import { commitMermaidRepair, repairMermaidDiagram } from '../api/chat'
 
 const MERMAID_SCENE_THEMES = {
   day: {
@@ -67,6 +67,14 @@ function renderMermaidDiagram(diagramId, chart, scene) {
       securityLevel: 'strict',
       theme: 'base',
       fontFamily: 'Inter, "Noto Sans SC", "Microsoft YaHei", sans-serif',
+      flowchart: {
+        defaultRenderer: 'dagre-wrapper',
+        diagramPadding: 10,
+        nodeSpacing: 32,
+        rankSpacing: 36,
+        inheritDir: false,
+        useMaxWidth: true,
+      },
       themeVariables: {
         background: 'transparent',
         mainBkg: themeVariables.primaryColor,
@@ -93,6 +101,7 @@ function MermaidDiagram({
   scene,
   conversationId,
   messageId,
+  onContentUpdate,
   labels = {},
 }) {
   const reactId = useId()
@@ -106,10 +115,22 @@ function MermaidDiagram({
   const [copyState, setCopyState] = useState('')
   const [repairing, setRepairing] = useState(false)
   const [repairFeedback, setRepairFeedback] = useState('')
+  const [saveState, setSaveState] = useState('')
+  const [pendingRepair, setPendingRepair] = useState(null)
+  const feedbackTimerRef = useRef(null)
 
   useEffect(() => {
-    setActiveChart(chart)
-  }, [chart])
+    if (chart !== activeChart) {
+      setActiveChart(chart)
+      setSaveState('')
+      setPendingRepair(null)
+      setRepairFeedback('')
+    }
+  }, [activeChart, chart])
+
+  useEffect(() => () => {
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -145,10 +166,39 @@ function MermaidDiagram({
     }
   }
 
+  const saveRepair = async (repair) => {
+    if (!conversationId || !messageId) return
+    setSaveState('saving')
+    try {
+      const saved = await commitMermaidRepair({
+        conversation_id: conversationId,
+        message_id: messageId,
+        original_source: repair.originalSource,
+        repaired_source: repair.repairedSource,
+      })
+      setPendingRepair(null)
+      setSaveState('saved')
+      setRepairFeedback('')
+      onContentUpdate?.(messageId, saved.content)
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+      feedbackTimerRef.current = setTimeout(() => {
+        setSaveState(current => current === 'saved' ? '' : current)
+      }, 2600)
+    } catch (err) {
+      setSaveState('failed')
+      setRepairFeedback(
+        err.message
+        || labels.mermaidSaveFailed
+        || '图表已修复，但保存失败，请重试',
+      )
+    }
+  }
+
   const handleRepair = async () => {
     if (!conversationId || !messageId || repairing) return
     setRepairing(true)
     setRepairFeedback('')
+    setSaveState('')
     try {
       const result = await repairMermaidDiagram({
         conversation_id: conversationId,
@@ -156,7 +206,30 @@ function MermaidDiagram({
         source: chart,
         parse_error: error,
       })
+      let rendered
+      try {
+        rendered = await renderMermaidDiagram(
+          `${diagramId}-repair-${Date.now()}`,
+          result.source,
+          scene,
+        )
+      } catch {
+        setRepairFeedback(
+          labels.mermaidRepairInvalid
+          || '重新生成的图表仍无法渲染，已保留原源码',
+        )
+        return
+      }
+
+      const repair = {
+        originalSource: chart,
+        repairedSource: result.source,
+      }
       setActiveChart(result.source)
+      setSvg(rendered.svg)
+      setError('')
+      setPendingRepair(repair)
+      await saveRepair(repair)
     } catch (err) {
       setRepairFeedback(err.message || labels.mermaidRepairFailed || '图表重新生成失败')
     } finally {
@@ -196,10 +269,34 @@ function MermaidDiagram({
   }
 
   return (
-    <div
-      className="mermaid-surface mermaid-diagram"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    <div className="mermaid-result">
+      <div
+        className="mermaid-surface mermaid-diagram"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      {saveState && (
+        <div
+          className={`mermaid-save-status is-${saveState}`}
+          role={saveState === 'failed' ? 'alert' : 'status'}
+        >
+          <span>
+            {saveState === 'saving'
+              ? labels.mermaidSaving || '正在保存修复结果…'
+              : saveState === 'saved'
+                ? labels.mermaidSaved || '图表已修复并保存'
+                : repairFeedback || labels.mermaidSaveFailed || '图表已修复，但保存失败'}
+          </span>
+          {saveState === 'failed' && pendingRepair && (
+            <button
+              type="button"
+              onClick={() => saveRepair(pendingRepair)}
+            >
+              {labels.mermaidRetrySave || '重试保存'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -210,6 +307,7 @@ function MarkdownCode({
   scene,
   conversationId,
   messageId,
+  onContentUpdate,
   labels,
   ...props
 }) {
@@ -224,6 +322,7 @@ function MarkdownCode({
         scene={scene}
         conversationId={conversationId}
         messageId={messageId}
+        onContentUpdate={onContentUpdate}
         labels={labels}
       />
     )
@@ -295,6 +394,7 @@ function MarkdownMessage({
   scene = 'night',
   conversationId = null,
   messageId = null,
+  onContentUpdate = null,
   labels = {},
 }) {
   const normalized = useMemo(() => normalizeMathContent(content), [content])
@@ -307,13 +407,14 @@ function MarkdownMessage({
             scene={scene}
             conversationId={conversationId}
             messageId={messageId}
+            onContentUpdate={onContentUpdate}
             labels={labels}
           />
         )
       },
       pre: MarkdownPre,
     }),
-    [conversationId, labels, messageId, scene],
+    [conversationId, labels, messageId, onContentUpdate, scene],
   )
 
   return (

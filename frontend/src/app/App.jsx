@@ -1155,6 +1155,15 @@ function AppController() {
     }
   }
 
+  const handleAssistantContentUpdate = useCallback((messageId, content) => {
+    if (!messageId || !content) return
+    setMessages(prev => prev.map(message => (
+      message.id === messageId
+        ? { ...message, content }
+        : message
+    )))
+  }, [])
+
   const handleExampleSelect = (prompt) => {
     setInput(prompt)
     requestAnimationFrame(() => {
@@ -1310,6 +1319,7 @@ function AppController() {
     expandedHomeworkId,
     generatingLearning,
     handleAddStudent,
+    handleAssistantContentUpdate,
     handleCopyMessage,
     handleCreateClass,
     handleDeleteHomework,

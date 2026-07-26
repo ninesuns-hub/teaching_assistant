@@ -5,8 +5,15 @@ from unittest.mock import patch
 
 from agent_core.react_agent import AnswerStreamExtractor, ReactAgent
 from agent_core.tools.base import Tool
-from app.core.mermaid_service import repair_mermaid_source
-from app.interfaces.api.schemas import MermaidRepairRequest
+from app.core.mermaid_service import (
+    MermaidSourceConflict,
+    repair_mermaid_source,
+    replace_saved_mermaid_source,
+)
+from app.interfaces.api.schemas import (
+    MermaidRepairCommitRequest,
+    MermaidRepairRequest,
+)
 
 
 class AnswerStreamExtractorTests(unittest.TestCase):
@@ -125,6 +132,54 @@ class MermaidRepairServiceTests(unittest.TestCase):
         self.assertIn('safe_id["安全标题"]', repaired)
         self.assertNotIn("```", repaired)
 
+    def test_replaces_only_the_matching_mermaid_block(self):
+        original = "graph LR\nA-->B"
+        repaired = 'flowchart LR\nA["开始"] --> B["结束"]'
+        content = (
+            "保留这段正文。\n\n"
+            f"```mermaid\n{original}\n```\n\n"
+            "```mermaid\nflowchart TB\nX-->Y\n```\n"
+        )
+
+        updated, changed = replace_saved_mermaid_source(
+            content,
+            original,
+            repaired,
+        )
+
+        self.assertTrue(changed)
+        self.assertIn("保留这段正文。", updated)
+        self.assertIn(repaired, updated)
+        self.assertIn("flowchart TB\nX-->Y", updated)
+        self.assertNotIn(original, updated)
+
+    def test_repair_commit_is_idempotent(self):
+        repaired = 'flowchart LR\nA["开始"] --> B["结束"]'
+        content = f"```mermaid\n{repaired}\n```"
+
+        updated, changed = replace_saved_mermaid_source(
+            content,
+            "graph LR\nA-->B",
+            repaired,
+        )
+
+        self.assertFalse(changed)
+        self.assertEqual(updated, content)
+
+    def test_rejects_ambiguous_duplicate_mermaid_blocks(self):
+        original = "graph LR\nA-->B"
+        content = (
+            f"```mermaid\n{original}\n```\n"
+            f"```mermaid\n{original}\n```"
+        )
+
+        with self.assertRaisesRegex(MermaidSourceConflict, "多个相同图表"):
+            replace_saved_mermaid_source(
+                content,
+                original,
+                "flowchart LR\nA-->B",
+            )
+
     def test_repair_endpoint_rejects_source_outside_saved_message(self):
         from app.interfaces.api import routes
 
@@ -145,6 +200,57 @@ class MermaidRepairServiceTests(unittest.TestCase):
                     current_user=SimpleNamespace(id=1),
                     db=SimpleNamespace(),
                 )
+
+    def test_commit_endpoint_updates_original_message_content(self):
+        from app.interfaces.api import routes
+
+        original = "graph LR\nA-->B"
+        repaired = 'flowchart LR\nA["开始"] --> B["结束"]'
+        conversation = SimpleNamespace(updated_at=None)
+        message = SimpleNamespace(
+            content=f"正文\n```mermaid\n{original}\n```\n结尾",
+            conversation=conversation,
+        )
+
+        class FakeDb:
+            committed = False
+            refreshed = False
+
+            def commit(self):
+                self.committed = True
+
+            def refresh(self, _message):
+                self.refreshed = True
+
+            def rollback(self):
+                raise AssertionError("successful commit must not roll back")
+
+        db = FakeDb()
+        payload = MermaidRepairCommitRequest(
+            conversation_id="conversation",
+            message_id=10,
+            original_source=original,
+            repaired_source=repaired,
+        )
+        with patch.object(
+            routes.conversation_repo,
+            "get_user_assistant_message_for_update",
+            return_value=message,
+        ):
+            response = routes.commit_mermaid_repair(
+                payload,
+                current_user=SimpleNamespace(id=1),
+                db=db,
+            )
+
+        self.assertTrue(db.committed)
+        self.assertTrue(db.refreshed)
+        self.assertEqual(response.content, message.content)
+        self.assertIn("正文", response.content)
+        self.assertIn("结尾", response.content)
+        self.assertIn(repaired, response.content)
+        self.assertNotIn(original, response.content)
+        self.assertIsNotNone(conversation.updated_at)
 
 
 class ChatSseTests(unittest.TestCase):

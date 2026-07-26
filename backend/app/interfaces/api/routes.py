@@ -15,7 +15,13 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
-from .schemas import ChatRequest, MermaidRepairRequest, MermaidRepairResponse
+from .schemas import (
+    ChatRequest,
+    MermaidRepairCommitRequest,
+    MermaidRepairCommitResponse,
+    MermaidRepairRequest,
+    MermaidRepairResponse,
+)
 from agent_core import ReactAgent
 from database.course_repo import query_course_admin, init_db
 from database.mysql_db import get_db, User, UserRole
@@ -23,7 +29,11 @@ from database import conversation_repo, rag_repo
 from agent_core.config.settings import settings
 from app.core.data_manager import data_manager
 from app.core.chat_image_store import save_chat_image, resolve_image_path
-from app.core.mermaid_service import repair_mermaid_source
+from app.core.mermaid_service import (
+    MermaidSourceConflict,
+    repair_mermaid_source,
+    replace_saved_mermaid_source,
+)
 from app.core.agent_bindings import build_agent_tools
 from app.core.deps import get_current_user, require_role
 from .auth_routes import router as auth_router
@@ -352,7 +362,13 @@ def repair_mermaid(
     )
     if not message:
         raise HTTPException(status_code=404, detail="没有找到对应的助手消息")
-    if payload.source.strip() not in message.content:
+    try:
+        replace_saved_mermaid_source(
+            message.content,
+            payload.source,
+            payload.source,
+        )
+    except MermaidSourceConflict:
         raise HTTPException(status_code=400, detail="该图表源码不属于对应的助手消息")
     try:
         repaired = repair_mermaid_source(
@@ -365,6 +381,53 @@ def repair_mermaid(
         logger.exception("Mermaid 修复失败")
         raise HTTPException(status_code=502, detail="图表重新生成失败，请稍后重试") from exc
     return MermaidRepairResponse(source=repaired)
+
+
+@router.post(
+    "/chat/mermaid/repair/commit",
+    response_model=MermaidRepairCommitResponse,
+)
+def commit_mermaid_repair(
+    payload: MermaidRepairCommitRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    message = conversation_repo.get_user_assistant_message_for_update(
+        db,
+        payload.conversation_id,
+        payload.message_id,
+        current_user.id,
+    )
+    if not message:
+        raise HTTPException(status_code=404, detail="没有找到对应的助手消息")
+
+    try:
+        updated_content, changed = replace_saved_mermaid_source(
+            message.content,
+            payload.original_source,
+            payload.repaired_source,
+        )
+        if changed:
+            message.content = updated_content
+            message.conversation.updated_at = conversation_repo.current_utc_time()
+        db.commit()
+        if changed:
+            db.refresh(message)
+    except MermaidSourceConflict as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        logger.exception("保存 Mermaid 修复结果失败")
+        raise HTTPException(
+            status_code=500,
+            detail="图表已修复，但保存失败，请重试",
+        )
+
+    return MermaidRepairCommitResponse(
+        source=payload.repaired_source,
+        content=message.content,
+    )
 
 
 @router.get("/chat/images/{user_id}/{filename}")

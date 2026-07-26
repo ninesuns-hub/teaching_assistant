@@ -447,8 +447,12 @@
     inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 5%, transparent);
 }
 
+.mermaid-result {
+  max-width: 100%;
+}
+
 /* Fallback for renderers that retain ReactMarkdown's fenced-code wrapper. */
-.markdown-message pre:has(> .mermaid-diagram) {
+.markdown-message pre:has(.mermaid-diagram) {
   margin: 0;
   padding: 0;
   overflow: visible;
@@ -464,9 +468,15 @@
   background: transparent !important;
 }
 
+.mermaid-diagram {
+  max-height: min(72vh, 720px);
+  overflow: auto;
+}
+
 .mermaid-error {
   margin-bottom: 10px;
-  color: #ffd18a;
+  color: var(--color-status-pending);
+  font-weight: 650;
   font-size: 13px;
 }
 
@@ -509,8 +519,36 @@
 
 .mermaid-repair-feedback {
   margin-top: 9px;
-  color: #ffd18a;
+  color: var(--color-status-pending);
+  font-weight: 600;
   font-size: 13px;
+}
+
+.mermaid-save-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 28px;
+  margin: -8px 2px 10px;
+  color: var(--color-status-pending);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mermaid-save-status.is-saved {
+  color: var(--color-status-done);
+}
+
+.mermaid-save-status button {
+  border: 1px solid color-mix(in srgb, var(--color-status-pending) 55%, var(--color-border-strong));
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-1) 72%, transparent);
+  color: var(--color-text-primary);
+  padding: 5px 9px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
 }
 
 .composer {
