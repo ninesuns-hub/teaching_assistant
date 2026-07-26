@@ -1,7 +1,7 @@
 [
-  {"id": "knowledge_relation", "intent": "course_knowledge", "question": "怎样判断二元关系是否具有传递性？"},
-  {"id": "knowledge_graph", "intent": "course_knowledge", "question": "欧拉回路和哈密顿回路有什么区别？"},
-  {"id": "knowledge_proof", "intent": "course_knowledge", "question": "请证明每棵树都有至少两个叶节点。"},
+  {"id": "knowledge_relation", "intent": "course_knowledge", "question": "怎样判断二元关系是否具有传递性？", "expects_mermaid": true},
+  {"id": "knowledge_graph", "intent": "course_knowledge", "question": "欧拉回路和哈密顿回路有什么区别？", "expects_mermaid": true},
+  {"id": "knowledge_proof", "intent": "course_knowledge", "question": "请证明每棵树都有至少两个叶节点。", "expects_mermaid": false},
   {"id": "admin_grading", "intent": "course_admin", "question": "这门课平时成绩占多少比例？"},
   {"id": "admin_teacher", "intent": "course_admin", "question": "授课教师是谁，答疑时间是什么时候？"},
   {"id": "admin_schedule", "intent": "course_admin", "question": "图论安排在第几周学习？"},

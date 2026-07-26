@@ -3,7 +3,7 @@
     "id": "binary_relation_properties",
     "question": "怎样依次判断二元关系的自反性、对称性和传递性？",
     "expects_sources": true,
-    "expects_mermaid": false,
+    "expects_mermaid": true,
     "required_terms": ["自反", "对称", "传递"]
   },
   {
@@ -17,7 +17,7 @@
     "id": "euler_hamilton",
     "question": "比较欧拉回路与哈密顿回路。",
     "expects_sources": true,
-    "expects_mermaid": false,
+    "expects_mermaid": true,
     "required_terms": ["边", "顶点"]
   },
   {
@@ -26,5 +26,12 @@
     "expects_sources": false,
     "expects_mermaid": false,
     "required_terms": ["成绩"]
+  },
+  {
+    "id": "binary_tree",
+    "question": "什么是二叉树？请用具体例子说明。",
+    "expects_sources": true,
+    "expects_mermaid": true,
+    "required_terms": ["根", "孩子"]
   }
 ]

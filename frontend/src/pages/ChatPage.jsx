@@ -13,6 +13,7 @@ export default function ChatPage({ model }) {
     analyzing_learning: t.chatAnalyzingLearning,
     organizing: t.chatOrganizing,
     using_tool: t.chatUsingTool,
+    generating_visual: t.chatGeneratingVisual,
   }
   const isWelcome = messages.length === 0 && !conversationLoading
   const composerProps = {

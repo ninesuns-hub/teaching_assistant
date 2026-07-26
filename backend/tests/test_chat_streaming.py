@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from agent_core.react_agent import AnswerStreamExtractor, ReactAgent
 from agent_core.tools.base import Tool
+from agent_core.visualization import decide_visualization
 from app.core.mermaid_service import (
     MermaidSourceConflict,
     repair_mermaid_source,
@@ -14,6 +15,7 @@ from app.interfaces.api.schemas import (
     MermaidRepairCommitRequest,
     MermaidRepairRequest,
 )
+from scripts.evaluate_chat_performance import validate_mermaid_sources
 
 
 class AnswerStreamExtractorTests(unittest.TestCase):
@@ -64,7 +66,7 @@ class AnswerStreamExtractorTests(unittest.TestCase):
         agent._call_llm_stream = lambda _prompt: iter(next(responses))
 
         events = list(agent.stream_events(
-            "什么是图？",
+            "什么是集合的基数？",
             request_context={"request_id": "test-request", "class_id": 1},
         ))
         content = "".join(
@@ -105,6 +107,137 @@ class AnswerStreamExtractorTests(unittest.TestCase):
         first_content = next(events)
         self.assertEqual(first_content, {"type": "content", "delta": "第一个片段"})
         self.assertFalse(state["upstream_resumed"])
+
+
+class ProactiveVisualizationTests(unittest.TestCase):
+    def test_balanced_visualization_policy(self):
+        required = [
+            "什么是图？",
+            "离散数学中的树是什么？",
+            "二叉树是什么？",
+            "怎样判断二元关系是否具有传递性？",
+            "欧拉回路和哈密顿回路有什么区别？",
+            "请画图帮助证明这个关系具有传递性。",
+            "Explain injective and surjective functions.",
+        ]
+        optional = [
+            "请证明每棵树至少有两个叶节点。",
+            "图论安排在第几周学习？",
+            "请用纯文字解释二元关系。",
+            "证明空集是唯一的。",
+        ]
+        for question in required:
+            with self.subTest(question=question):
+                self.assertTrue(decide_visualization(question).required)
+        for question in optional:
+            with self.subTest(question=question):
+                self.assertFalse(decide_visualization(question).required)
+
+    def test_missing_visual_is_supplemented_after_streamed_answer(self):
+        config = SimpleNamespace(
+            CHAT_API_KEY="test",
+            CHAT_BASE_URL="https://example.invalid",
+            CHAT_MODEL_NAME="test-model",
+            MAX_TOKENS=256,
+            SYSTEM_PROMPT="system",
+        )
+        agent = ReactAgent(config, [])
+        agent._call_llm_stream = lambda _prompt: iter([
+            "<answer>二叉树每个节点最多有两个孩子。</answer>",
+        ])
+        agent._generate_visual_supplement = lambda _question, _answer: (
+            "\n\n### 图示示例\n\n```mermaid\nflowchart TB\nA-->B\n```"
+        )
+
+        events = list(agent.stream_events(
+            "二叉树是什么？",
+            request_context={"request_id": "visual-test"},
+        ))
+        content = "".join(
+            event.get("delta", "")
+            for event in events
+            if event["type"] == "content"
+        )
+        stages = [
+            event["stage"] for event in events if event["type"] == "status"
+        ]
+
+        self.assertTrue(content.startswith("二叉树每个节点"))
+        self.assertIn("```mermaid", content)
+        self.assertIn("generating_visual", stages)
+        self.assertTrue(agent.request_context["visual_supplement_used"])
+
+    def test_existing_visual_is_not_duplicated(self):
+        config = SimpleNamespace(
+            CHAT_API_KEY="test",
+            CHAT_BASE_URL="https://example.invalid",
+            CHAT_MODEL_NAME="test-model",
+            MAX_TOKENS=256,
+            SYSTEM_PROMPT="system",
+        )
+        agent = ReactAgent(config, [])
+        agent._call_llm_stream = lambda _prompt: iter([
+            "<answer>示例：\n```mermaid\nflowchart TB\nA-->B\n```</answer>",
+        ])
+        agent._generate_visual_supplement = lambda *_args: self.fail(
+            "existing Mermaid must not trigger a supplement"
+        )
+
+        events = list(agent.stream_events(
+            "二叉树是什么？",
+            request_context={"request_id": "visual-existing"},
+        ))
+        content = "".join(
+            event.get("delta", "")
+            for event in events
+            if event["type"] == "content"
+        )
+
+        self.assertEqual(content.lower().count("```mermaid"), 1)
+        self.assertFalse(agent.request_context["visual_supplement_used"])
+
+    def test_welcome_message_does_not_trigger_visual_supplement(self):
+        config = SimpleNamespace(
+            CHAT_API_KEY="test",
+            CHAT_BASE_URL="https://example.invalid",
+            CHAT_MODEL_NAME="test-model",
+            MAX_TOKENS=256,
+            SYSTEM_PROMPT="system",
+        )
+        agent = ReactAgent(config, [])
+        agent._call_llm_stream = lambda _prompt: iter([
+            "<answer>你好，我可以通过文字、公式和 Mermaid 图形帮助你学习。</answer>",
+        ])
+        agent._generate_visual_supplement = lambda *_args: self.fail(
+            "welcome messages must not trigger a supplement"
+        )
+
+        events = list(agent.stream_events(
+            "请介绍一下你自己",
+            request_context={"request_id": "welcome-test", "welcome": True},
+        ))
+
+        self.assertFalse(any(
+            event.get("stage") == "generating_visual" for event in events
+        ))
+        self.assertEqual(agent.request_context["visualization_reason"], "welcome")
+        self.assertFalse(agent.request_context["visual_supplement_used"])
+
+    def test_benchmark_uses_current_mermaid_parser(self):
+        valid = validate_mermaid_sources(
+            "```mermaid\nflowchart TB\nA-->B\n```"
+        )
+        invalid = validate_mermaid_sources(
+            "```mermaid\nflowchart TB\nbroken[\n```"
+        )
+        suspicious = validate_mermaid_sources(
+            '```mermaid\nflowchart TB\nA["땅듐"]\n```'
+        )
+
+        self.assertTrue(valid["validator_available"])
+        self.assertEqual(valid["valid"], 1)
+        self.assertEqual(invalid["invalid"], 1)
+        self.assertEqual(suspicious["suspicious_text"], 1)
 
 
 class MermaidRepairServiceTests(unittest.TestCase):
