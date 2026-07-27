@@ -202,18 +202,18 @@ function AppController() {
       : 'chat'
 
   const welcomeText = useMemo(() => {
-    if (!user) return t.auth.welcomeGuest
+    if (!user) return t.auth.welcomeGuestIntro
     if (user.needs_role_selection) return t.auth.welcomeRolePending
     if (isTeacher && !activeClass) {
       return language === 'zh'
         ? '你好，老师！请先创建或选择一个班级，然后我会围绕当前班级协助你进行教学问答、资料与学生管理。'
         : 'Hello, teacher! Create or select a class first, then I can support teaching Q&A, materials, and student management for that class.'
     }
-    return isTeacher ? t.auth.welcomeTeacher : isStudent ? t.auth.welcomeStudent : t.auth.welcomeGuest
+    return isTeacher ? t.auth.welcomeTeacher : isStudent ? t.auth.welcomeStudent : t.auth.welcomeGuestIntro
   }, [user, isTeacher, isStudent, activeClass, language, t])
 
   const chatPlaceholder = useMemo(() => {
-    if (!user) return t.auth.welcomeGuest
+    if (!user) return t.auth.welcomeGuestPrompt
     if (user.needs_role_selection) return t.auth.welcomeRolePending
     return t.placeholder
   }, [user, t])
@@ -1568,7 +1568,7 @@ function AppController() {
         />
       )}
 
-      <LearningReportDrawer value={learningDrawer} language={language} onClose={() => setLearningDrawer(null)} />
+      <LearningReportDrawer value={learningDrawer} role={user?.role} language={language} onClose={() => setLearningDrawer(null)} />
 
       <AppModals model={viewModel} />
 

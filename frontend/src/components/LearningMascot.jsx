@@ -27,7 +27,8 @@ const copy = {
     recentTrails: '最近的学习轨迹', effective: '{count} 次有效学习交流', messages: '{count} 条对话记录',
     reportReady: '可以查看报告', reportPending: '还在积累',
     syncing: '正在同步', close: '关闭', report: '学情报告', feedback: '班级学情反馈', generatedAt: '整理于',
-    summary: '小离的观察', topics: '聊到的知识点', weak: '值得再练一练', suggestions: '接下来可以这样学',
+    summary: '小离的观察', topics: '聊到的知识点', weak: '值得再练一练',
+    studentSuggestions: '接下来可以这样学', teacherSuggestions: '接下来可以这样教',
     contextFirst: '先告诉我是哪门课', newHint: '有新的学情提示', mascotLabel: '打开学情笔记',
   },
   en: {
@@ -53,7 +54,8 @@ const copy = {
     recentTrails: 'Recent learning trails', effective: '{count} meaningful exchanges', messages: '{count} conversation messages',
     reportReady: 'Report ready', reportPending: 'Still growing',
     syncing: 'Syncing', close: 'Close', report: 'Learning report', feedback: 'Class learning feedback', generatedAt: 'Organized',
-    summary: "Xiaoli's observation", topics: 'Topics discussed', weak: 'Worth practicing', suggestions: 'What to try next',
+    summary: "Xiaoli's observation", topics: 'Topics discussed', weak: 'Worth practicing',
+    studentSuggestions: 'What to try next', teacherSuggestions: 'What to teach next',
     contextFirst: 'Tell me which class first', newHint: 'New learning update', mascotLabel: 'Open learning notes',
   },
 }
@@ -67,6 +69,42 @@ function formatDate(value, language) {
   return new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en', {
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   }).format(new Date(value))
+}
+
+function stripTrailingAdviceSection(summary = '') {
+  return summary.replace(
+    /(?:^|\n)\s*(?:学习建议|教学建议|learning suggestions?|teaching suggestions?)\s*[：:]\s*\n?[\s\S]*$/i,
+    '',
+  ).trim()
+}
+
+function adaptLegacyStudentSuggestion(suggestion) {
+  const adapted = String(suggestion || '')
+    .replace(/检验学生能否/g, '检验自己能否')
+    .replace(/建议学生/g, '建议你')
+    .replace(/鼓励学生/g, '你可以')
+    .replace(/帮助学生/g, '帮助你')
+    .replace(/让学生/g, '让你')
+    .replace(/可以布置/g, '可以练习')
+    .replace(/布置/g, '练习')
+    .replace(/^提供一些/g, '可以找一些')
+    .replace(/学生/g, '你')
+    .trim()
+
+  if (!adapted || /(教师|任课|课堂讲解|教学安排|批改|评分)/.test(adapted)) return null
+  return adapted
+}
+
+function getReportSuggestions(value, role) {
+  const stats = value?.data?.stats || {}
+  const teacherView = role === 'teacher' || value?.type === 'feedback'
+  if (teacherView) {
+    return stats.teaching_suggestions?.length
+      ? stats.teaching_suggestions
+      : stats.suggestions || []
+  }
+  if (stats.student_suggestions?.length) return stats.student_suggestions
+  return (stats.suggestions || []).map(adaptLegacyStudentSuggestion).filter(Boolean)
 }
 
 function StudentPanel({ text, status, generating, hasError, onGenerate, onViewLatest, onFocusChat }) {
@@ -143,7 +181,7 @@ function TeacherPanel({ text, status, generating, hasError, isActionPending, onG
   )
 }
 
-export function LearningReportDrawer({ value, language = 'zh', onClose }) {
+export function LearningReportDrawer({ value, role = 'student', language = 'zh', onClose }) {
   const text = copy[language] || copy.zh
   useEffect(() => {
     if (!value) return undefined
@@ -157,7 +195,11 @@ export function LearningReportDrawer({ value, language = 'zh', onClose }) {
   const stats = data?.stats || {}
   const topics = stats.topics || stats.common_topics || []
   const weak = stats.weak_points || stats.class_weak_points || []
-  const suggestions = stats.suggestions || stats.teaching_suggestions || []
+  const suggestions = getReportSuggestions(value, role)
+  const suggestionHeading = role === 'teacher' || value.type === 'feedback'
+    ? text.teacherSuggestions
+    : text.studentSuggestions
+  const summary = stripTrailingAdviceSection(data.summary)
   return (
     <div className="learning-drawer-layer" role="presentation" onClick={onClose}>
       <aside className="learning-report-drawer" role="dialog" aria-modal="true" aria-label={value.type === 'feedback' ? text.feedback : text.report} onClick={event => event.stopPropagation()}>
@@ -170,9 +212,9 @@ export function LearningReportDrawer({ value, language = 'zh', onClose }) {
           {data.message_count != null && <span>{data.message_count} 条对话记录</span>}
         </div>
         {topics.length > 0 && <section className="learning-insight-block"><h3>{text.topics}</h3><div className="learning-tag-list">{topics.map(item => <span key={item}>{item}</span>)}</div></section>}
-        <section className="learning-report-summary"><h3>{text.summary}</h3><div>{data.summary}</div></section>
+        <section className="learning-report-summary"><h3>{text.summary}</h3><div>{summary}</div></section>
         {weak.length > 0 && <section className="learning-insight-block"><h3>{text.weak}</h3><ul>{weak.map(item => <li key={item}>{item}</li>)}</ul></section>}
-        {suggestions.length > 0 && <section className="learning-insight-block learning-suggestions"><h3>{text.suggestions}</h3><ol>{suggestions.map(item => <li key={item}>{item}</li>)}</ol></section>}
+        {suggestions.length > 0 && <section className="learning-insight-block learning-suggestions"><h3>{suggestionHeading}</h3><ol>{suggestions.map(item => <li key={item}>{item}</li>)}</ol></section>}
       </aside>
     </div>
   )

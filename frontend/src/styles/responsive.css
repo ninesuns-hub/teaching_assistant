@@ -207,6 +207,7 @@
   }
 
   .resource-library-header .filter-bar {
+    width: 100%;
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
@@ -214,6 +215,11 @@
 
   .resource-library-header .filter-bar::-webkit-scrollbar {
     display: none;
+  }
+
+  .resource-library-header .filter-btn {
+    flex: 0 0 auto;
+    padding-inline: 14px;
   }
 
   .resources-grid {
