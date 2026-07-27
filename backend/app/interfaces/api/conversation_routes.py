@@ -4,12 +4,20 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
 from database.mysql_db import get_db, User
-from database import conversation_repo
+from database import conversation_repo, memory_vector_repo
 from app.core.deps import get_current_user
 from app.core.chat_image_store import image_url_for_path
 from .schemas import ConversationResponse, ChatMessageResponse, ChatRequest, MessageFeedbackRequest, RenameConversationRequest
 
 router = APIRouter()
+
+
+def _memory_context_count(raw: str | None) -> int:
+    try:
+        value = json.loads(raw or "{}")
+        return int(value.get("memory_context_count", 0)) if isinstance(value, dict) else 0
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return 0
 
 
 @router.get("", response_model=list[ConversationResponse])
@@ -63,6 +71,8 @@ def get_conversation_messages(
             content=m.content,
             image_url=image_url_for_path(m.image_path),
             feedback=m.feedback_type,
+            memory_context_count=_memory_context_count(m.retrieved_context)
+            if m.role == "assistant" else 0,
             created_at=m.created_at.isoformat(),
         )
         for m in messages
@@ -116,7 +126,14 @@ def delete_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    deleted = conversation_repo.delete_conversation(db, public_id, current_user.id)
+    deleted, memory_ids = conversation_repo.delete_conversation(
+        db, public_id, current_user.id
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="会话不存在")
+    for memory_id in memory_ids:
+        try:
+            memory_vector_repo.delete_memory(memory_id)
+        except Exception:
+            pass
     return {"ok": True}

@@ -25,11 +25,13 @@ import {
   downloadSubmissionFile,
 } from '../api/homework'
 import { getStoredUser, setAuth, clearAuth } from '../api/httpClient'
+import { fetchMemorySettings, updateMemorySettings } from '../api/memory'
 import LearningMascot, { LearningReportDrawer } from '../components/LearningMascot'
 import Topbar from '../components/layout/Topbar'
 import SceneBackdrop from '../components/scenes/SceneBackdrop'
 import ChatHistorySidebar from '../components/chat/ChatHistorySidebar'
 import AppModals from '../components/modals/AppModals'
+import MemorySettingsPanel from '../components/MemorySettingsPanel'
 import ChatPage from '../pages/ChatPage'
 import ResourcesPage from '../pages/ResourcesPage'
 import HomeworkPage from '../pages/HomeworkPage'
@@ -99,6 +101,8 @@ function AppController() {
   const [welcomeContent, setWelcomeContent] = useState('')
   const [welcomeLoading, setWelcomeLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false)
+  const [memorySetting, setMemorySetting] = useState(null)
   const [authModal, setAuthModal] = useState(null) // null, 'login', 'signup'
   const [roleModalOpen, setRoleModalOpen] = useState(false)
   const [user, setUser] = useState(() => getStoredUser())
@@ -234,6 +238,40 @@ function AppController() {
       console.error(err)
     }
   }, [user?.role, activeClassId])
+
+  useEffect(() => {
+    if (!user?.role) {
+      setMemorySetting(null)
+      setMemoryPanelOpen(false)
+      return
+    }
+    fetchMemorySettings()
+      .then(setMemorySetting)
+      .catch(error => console.error('Unable to load memory settings', error))
+  }, [user?.email, user?.role])
+
+  useEffect(() => {
+    if (
+      !memoryPanelOpen
+      || !memorySetting?.enabled
+      || !['queued', 'running'].includes(memorySetting.backfill_status)
+    ) return undefined
+    const timer = window.setInterval(() => {
+      fetchMemorySettings()
+        .then(setMemorySetting)
+        .catch(error => console.error('Unable to refresh memory settings', error))
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [memoryPanelOpen, memorySetting?.enabled, memorySetting?.backfill_status])
+
+  const handleMemorySettingChange = async (enabled) => {
+    try {
+      const result = await updateMemorySettings(enabled)
+      setMemorySetting(result)
+    } catch (error) {
+      alert(error.message)
+    }
+  }
 
   const loadMaterials = useCallback(async (classId) => {
     if (!classId) return
@@ -1304,6 +1342,7 @@ function AppController() {
         message: text,
         conversation_id: conversationId,
         class_id: activeClassId,
+        client_message_id: crypto.randomUUID(),
         ...imagePayload,
       }, (event) => {
         setMessages(prev => {
@@ -1326,6 +1365,7 @@ function AppController() {
               newMessages[lastIndex] = {
                 ...current,
                 id: event.message_id || current.id,
+                memoryContextCount: event.memory_context_count || 0,
                 statusStage: null,
               }
             } else if (event.type === 'error') {
@@ -1351,6 +1391,7 @@ function AppController() {
           content: m.content,
           imagePath: m.image_url || null,
           feedback: m.feedback || null,
+          memoryContextCount: m.memory_context_count || 0,
         })))
         loadedConversationIdRef.current = newConversationId
         rememberChatPath(`/chat/${newConversationId}`)
@@ -1458,6 +1499,7 @@ function AppController() {
     messagesListRef,
     messagesEndRef,
     openMaterialFile,
+    onOpenMemory: () => setMemoryPanelOpen(true),
     pendingImage,
     quoteOpacity,
     roleModalOpen,
@@ -1512,6 +1554,10 @@ function AppController() {
           onNavigate={handleSectionChange}
           onLogout={handleLogout}
           onOpenAuth={setAuthModal}
+          onOpenMemory={() => {
+            setSettingsOpen(false)
+            setMemoryPanelOpen(true)
+          }}
         />
 
         <Routes>
@@ -1571,6 +1617,13 @@ function AppController() {
       <LearningReportDrawer value={learningDrawer} role={user?.role} language={language} onClose={() => setLearningDrawer(null)} />
 
       <AppModals model={viewModel} />
+      <MemorySettingsPanel
+        open={memoryPanelOpen}
+        language={language}
+        setting={memorySetting}
+        onClose={() => setMemoryPanelOpen(false)}
+        onSettingChange={handleMemorySettingChange}
+      />
 
     </div>
   )

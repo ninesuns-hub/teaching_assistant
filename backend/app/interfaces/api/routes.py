@@ -35,6 +35,11 @@ from app.core.mermaid_service import (
     replace_saved_mermaid_source,
 )
 from app.services.learning_jobs import recover_incomplete_learning_jobs
+from app.services.context_service import build_chat_context
+from app.services.memory_jobs import (
+    enqueue_after_answer,
+    recover_incomplete_memory_jobs,
+)
 from app.core.agent_bindings import build_agent_tools
 from app.core.deps import get_current_user, require_role
 from .auth_routes import router as auth_router
@@ -42,6 +47,7 @@ from .class_routes import router as class_router
 from .conversation_routes import router as conversation_router
 from .learning_routes import router as learning_router
 from .homework_routes import router as homework_router
+from .memory_routes import router as memory_router
 
 hybrid_searcher = data_manager.searcher
 logger = logging.getLogger(__name__)
@@ -52,20 +58,20 @@ router.include_router(class_router, prefix="/classes", tags=["classes"])
 router.include_router(conversation_router, prefix="/conversations", tags=["conversations"])
 router.include_router(learning_router, prefix="/learning", tags=["learning"])
 router.include_router(homework_router, prefix="/homework", tags=["homework"])
+router.include_router(memory_router, tags=["memory"])
 
 init_db()
 recover_incomplete_learning_jobs()
+recover_incomplete_memory_jobs()
 
-_agent_holder: list[ReactAgent | None] = [None]
 agent = ReactAgent(
     config=settings,
     tools=build_agent_tools(
-        lambda: _agent_holder[0].request_context if _agent_holder[0] else {},
+        None,
         hybrid_searcher,
         query_course_admin,
     ),
 )
-_agent_holder[0] = agent
 
 
 def _build_agent_input(message: str, image_path: Optional[str]) -> str:
@@ -151,6 +157,18 @@ def _stream_welcome(agent_input: str, request_context: dict):
     yield _sse("done", {})
 
 
+def _replay_saved_response(conversation_public_id: str, user_message, assistant_message):
+    yield _sse("content", {"delta": assistant_message.content})
+    yield _sse("done", {
+        "conversation_id": conversation_public_id,
+        "message_id": assistant_message.id,
+        "user_message_id": user_message.id,
+        "assistant_message_id": assistant_message.id,
+        "memory_context_count": 0,
+        "replayed": True,
+    })
+
+
 def _stream_and_persist(
     display_message: str,
     agent_input: str,
@@ -158,66 +176,102 @@ def _stream_and_persist(
     conversation_public_id: str,
     request_context: dict,
     image_path: Optional[str] = None,
+    user_message_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    memory_context_count: int = 0,
 ):
     from database.mysql_db import SessionLocal
 
     request_id = request_context.get("request_id", "-")
     request_started_at = time.perf_counter()
     full_response = ""
-    observations = None
-    for event in agent.stream_events(agent_input, request_context=request_context):
-        if event["type"] == "content":
-            delta = event.get("delta", "")
-            if delta:
-                full_response += delta
-                yield _sse("content", {"delta": delta})
-        elif event["type"] == "status":
-            yield _sse("status", {"stage": event.get("stage", "understanding")})
-        elif event["type"] == "error":
-            message = event.get("message", "处理请求时出现错误")
-            if not full_response:
-                full_response = message
-            yield _sse("error", {"message": message})
-
-    if hasattr(agent, "last_observations"):
-        observations = agent.last_observations
-
-    save_started_at = time.perf_counter()
-    db = SessionLocal()
+    observations: list[str] = []
+    generation_failed = False
     try:
-        ctx = {}
-        if observations:
-            ctx["observations"] = observations
-        conversation_repo.add_message(
-            db,
-            conversation_id,
-            "user",
-            display_message,
-            image_path=image_path,
-            retrieved_context=ctx if observations else None,
+        for event in agent.stream_events(agent_input, request_context=request_context):
+            if event["type"] == "content":
+                delta = event.get("delta", "")
+                if delta:
+                    full_response += delta
+                    yield _sse("content", {"delta": delta})
+            elif event["type"] == "status":
+                yield _sse("status", {"stage": event.get("stage", "understanding")})
+            elif event["type"] == "run_state":
+                observations = event.get("observations") or []
+            elif event["type"] == "error":
+                generation_failed = True
+                yield _sse("error", {"message": event.get("message", "处理请求时出现错误")})
+
+        if generation_failed or not full_response.strip():
+            return
+
+        save_started_at = time.perf_counter()
+        db = SessionLocal()
+        try:
+            if user_message_id is None:
+                legacy_user_message = conversation_repo.add_message(
+                    db,
+                    conversation_id,
+                    "user",
+                    display_message,
+                    image_path=image_path,
+                )
+                user_message_id = legacy_user_message.id
+            assistant_message = conversation_repo.add_message(
+                db,
+                conversation_id,
+                "assistant",
+                full_response,
+                retrieved_context={
+                    "observations": observations,
+                    "memory_context_count": memory_context_count,
+                },
+                in_reply_to_id=user_message_id,
+            )
+        except Exception:
+            logger.exception("聊天消息保存失败 request_id=%s", request_id)
+            yield _sse("error", {"message": "回答已生成，但保存聊天记录失败"})
+            return
+        finally:
+            db.close()
+        _log_chat_timing(request_id, "message_persistence", save_started_at)
+        if user_id is not None:
+            try:
+                enqueue_after_answer(
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    assistant_message_id=assistant_message.id,
+                )
+            except Exception:
+                logger.exception(
+                    "记忆后台任务入队失败 request_id=%s",
+                    request_id,
+                )
+        _log_chat_timing(request_id, "request_total", request_started_at)
+        yield _sse(
+            "done",
+            {
+                "conversation_id": conversation_public_id,
+                "message_id": assistant_message.id,
+                "user_message_id": user_message_id,
+                "assistant_message_id": assistant_message.id,
+                "memory_context_count": memory_context_count,
+            },
         )
-        assistant_message = conversation_repo.add_message(
-            db,
-            conversation_id,
-            "assistant",
-            full_response or "（无回复）",
-            retrieved_context={"observations": observations} if observations else None,
-        )
-    except Exception:
-        logger.exception("聊天消息保存失败 request_id=%s", request_id)
-        yield _sse("error", {"message": "回答已生成，但保存聊天记录失败"})
-        return
     finally:
-        db.close()
-    _log_chat_timing(request_id, "message_persistence", save_started_at)
-    _log_chat_timing(request_id, "request_total", request_started_at)
-    yield _sse(
-        "done",
-        {
-            "conversation_id": conversation_public_id,
-            "message_id": assistant_message.id,
-        },
-    )
+        if request_context.get("generation_lock"):
+            lock_db = SessionLocal()
+            try:
+                conversation_repo.release_generation_lock(
+                    lock_db,
+                    conversation_id,
+                    request_id,
+                )
+            except Exception:
+                lock_db.rollback()
+                logger.exception("释放会话生成锁失败 request_id=%s", request_id)
+            finally:
+                lock_db.close()
 
 
 @router.post("/chat")
@@ -257,8 +311,38 @@ def chat(
     ):
         raise HTTPException(status_code=403, detail="无权使用该班级知识库")
 
-    image_path = None
-    if request.image_base64:
+    client_message_id = str(request.client_message_id) if request.client_message_id else None
+    existing_user_message = None
+    if client_message_id:
+        existing_user_message = conversation_repo.get_message_by_client_id(
+            db, conversation.id, client_message_id
+        )
+        if existing_user_message:
+            existing_reply = conversation_repo.get_reply_for_message(
+                db, existing_user_message.id
+            )
+            if existing_reply:
+                return StreamingResponse(
+                    _replay_saved_response(
+                        conversation.public_id,
+                        existing_user_message,
+                        existing_reply,
+                    ),
+                    media_type="text/event-stream",
+                    headers={
+                        "X-Conversation-Id": conversation.public_id,
+                        "X-Chat-Stream-Protocol": "sse-v1",
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
+
+    request_id = str(uuid.uuid4())
+    if not conversation_repo.acquire_generation_lock(db, conversation.id, request_id):
+        raise HTTPException(status_code=409, detail="当前会话正在生成回答，请稍后再试")
+
+    image_path = existing_user_message.image_path if existing_user_message else None
+    if request.image_base64 and existing_user_message is None:
         try:
             image_path = save_chat_image(
                 current_user.id,
@@ -266,18 +350,52 @@ def chat(
                 request.image_mime or "image/jpeg",
             )
         except ValueError as e:
+            conversation_repo.release_generation_lock(db, conversation.id, request_id)
             raise HTTPException(status_code=400, detail=str(e))
 
-    display_message = request.message.strip() or "[图片]"
+    effective_message = (
+        existing_user_message.content
+        if existing_user_message is not None
+        else request.message
+    )
+    display_message = effective_message.strip() or "[图片]"
+    try:
+        user_message = existing_user_message or conversation_repo.add_message(
+            db,
+            conversation.id,
+            "user",
+            display_message,
+            image_path=image_path,
+            client_message_id=client_message_id,
+        )
+        built_context = build_chat_context(
+            db,
+            user_id=current_user.id,
+            conversation_id=conversation.id,
+            class_id=resolved_class_id,
+            before_message_id=user_message.id,
+            request_id=request_id,
+            question=effective_message or display_message,
+        )
+    except Exception:
+        conversation_repo.release_generation_lock(db, conversation.id, request_id)
+        raise
+
     request_context = {
         "user_id": current_user.id,
         "user_role": current_user.role.value,
         "class_id": resolved_class_id,
-        "request_id": str(uuid.uuid4()),
+        "conversation_id": conversation.id,
+        "request_id": request_id,
+        "generation_lock": True,
+        "history_messages": built_context.history_messages,
+        "summary_text": built_context.summary_text,
+        "memories": built_context.memories,
     }
-    if image_path:
-        request_context["image_path"] = image_path
-    agent_input = _build_agent_input(request.message, image_path)
+    available_image_path = image_path or built_context.recent_image_path
+    if available_image_path:
+        request_context["image_path"] = available_image_path
+    agent_input = _build_agent_input(effective_message, image_path)
 
     try:
         return StreamingResponse(
@@ -288,6 +406,9 @@ def chat(
                 conversation.public_id,
                 request_context,
                 image_path,
+                user_message_id=user_message.id,
+                user_id=current_user.id,
+                memory_context_count=len(built_context.memories),
             ),
             media_type="text/event-stream",
             headers={
@@ -298,8 +419,10 @@ def chat(
             },
         )
     except FileNotFoundError:
+        conversation_repo.release_generation_lock(db, conversation.id, request_id)
         raise HTTPException(status_code=404, detail="图片文件不存在")
     except Exception as e:
+        conversation_repo.release_generation_lock(db, conversation.id, request_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -7,6 +9,7 @@ class ChatRequest(BaseModel):
     class_id: int | None = None
     image_base64: str | None = None
     image_mime: str | None = None
+    client_message_id: UUID | None = None
 
     @model_validator(mode="after")
     def require_message_or_image(self):
@@ -173,11 +176,47 @@ class ChatMessageResponse(BaseModel):
     content: str
     image_url: str | None = None
     feedback: str | None = None
+    memory_context_count: int = 0
     created_at: str
 
 
 class MessageFeedbackRequest(BaseModel):
     feedback_type: str
+
+
+class MemorySettingsRequest(BaseModel):
+    enabled: bool
+
+
+class MemorySettingsResponse(BaseModel):
+    enabled: bool
+    backfill_status: str
+    backfill_processed: int
+
+
+class MemoryUpdateRequest(BaseModel):
+    content: str = Field(min_length=4, max_length=500)
+
+    @field_validator("content")
+    @classmethod
+    def normalize_content(cls, value: str) -> str:
+        return value.strip()
+
+
+class MemoryItemResponse(BaseModel):
+    id: str
+    class_id: int | None = None
+    memory_type: str
+    content: str
+    confidence: float
+    importance: float
+    created_at: str
+    updated_at: str
+
+
+class MemoryListResponse(BaseModel):
+    items: list[MemoryItemResponse]
+    next_cursor: int | None = None
 
 
 class AddStudentRequest(BaseModel):

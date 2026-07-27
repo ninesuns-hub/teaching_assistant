@@ -118,6 +118,14 @@ export default function ChatPage({ model }) {
                       </div>
                     )}
                     {message.role === 'assistant' && message.id && message.content && (
+                      <>
+                      {message.memoryContextCount > 0 && (
+                        <button type="button" className="memory-context-note" onClick={model.onOpenMemory}>
+                          {language === 'zh'
+                            ? `本次参考了 ${message.memoryContextCount} 条记忆`
+                            : `Used ${message.memoryContextCount} memories`}
+                        </button>
+                      )}
                       <div className="message-actions">
                         <button type="button" className="feedback-btn" title={t.auth.feedbackCopy} aria-label={t.auth.feedbackCopy} onClick={() => handleCopyMessage(message.content)}>
                           <MessageActionIcon type="copy" />
@@ -129,6 +137,7 @@ export default function ChatPage({ model }) {
                           <MessageActionIcon type="down" />
                         </button>
                       </div>
+                      </>
                     )}
                   </div>
                 </div>

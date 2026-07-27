@@ -181,8 +181,20 @@
   justify-content: space-between;
   align-items: center;
   font-size: var(--font-size-control);
-  color: #fff;
+  color: var(--color-text-primary);
 }
+
+.settings-memory-link {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.settings-memory-link:hover { background: var(--color-surface-hover); }
 
 .lang-switch {
   display: flex;
@@ -297,3 +309,62 @@
   background: var(--color-accent);
   color: var(--color-accent-contrast);
 }
+.memory-panel {
+  position: relative;
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 40px));
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 24px;
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-floating);
+}
+
+.memory-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.memory-panel-header h2 { margin: 0 0 8px; }
+.memory-panel-header p { margin: 0; color: var(--color-text-secondary); line-height: 1.6; }
+
+.memory-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 24px 0;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 16px;
+  background: var(--color-surface-2);
+}
+
+.memory-toggle-row span { display: grid; gap: 6px; }
+.memory-toggle-row small { color: var(--color-text-secondary); }
+.memory-toggle-row input { width: 20px; height: 20px; accent-color: var(--color-accent); }
+.memory-list { display: grid; gap: 12px; }
+.memory-empty { color: var(--color-text-secondary); text-align: center; padding: 28px; }
+
+.memory-item {
+  padding: 16px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
+}
+
+.memory-item p { margin: 10px 0; line-height: 1.6; }
+.memory-item textarea { width: 100%; min-height: 90px; margin: 10px 0; resize: vertical; }
+.memory-item-meta, .memory-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.memory-item-meta { color: var(--color-text-secondary); font-size: 13px; }
+.memory-item-actions { justify-content: flex-end; }
+.memory-item-actions button { color: var(--color-accent); }
+.memory-panel-footer { display: flex; justify-content: flex-end; margin-top: 20px; }

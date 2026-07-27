@@ -1,12 +1,22 @@
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from database.mysql_db import Conversation, ChatMessage, User
+from database.mysql_db import (
+    ChatGenerationLock,
+    ChatMessage,
+    Conversation,
+    ConversationSummary,
+    MemoryEvidence,
+    MemoryItem,
+    MemoryJob,
+    User,
+)
 
 
 def create_conversation(
@@ -44,13 +54,58 @@ def list_user_conversations(db: Session, user_id: int, limit: int = 50) -> List[
     )
 
 
-def delete_conversation(db: Session, public_id: str, user_id: int) -> bool:
+def delete_conversation(
+    db: Session,
+    public_id: str,
+    user_id: int,
+) -> tuple[bool, list[str]]:
     conversation = get_conversation(db, public_id, user_id)
     if not conversation:
-        return False
+        return False, []
+    memory_ids = [
+        row[0]
+        for row in db.query(MemoryEvidence.memory_id)
+        .filter(MemoryEvidence.conversation_id == conversation.id)
+        .distinct()
+        .all()
+    ]
+    db.query(MemoryEvidence).filter(
+        MemoryEvidence.conversation_id == conversation.id
+    ).delete(synchronize_session=False)
+    db.query(ChatGenerationLock).filter(
+        ChatGenerationLock.conversation_id == conversation.id
+    ).delete(synchronize_session=False)
+    db.query(MemoryJob).filter(
+        MemoryJob.conversation_id == conversation.id
+    ).update({"conversation_id": None}, synchronize_session=False)
     db.delete(conversation)
+    db.flush()
+    for memory_id in memory_ids:
+        still_supported = (
+            db.query(MemoryEvidence.id)
+            .filter(MemoryEvidence.memory_id == memory_id)
+            .first()
+        )
+        if not still_supported:
+            db.query(MemoryItem).filter(MemoryItem.id == memory_id).update(
+                {"status": "deleted", "updated_at": current_utc_time()},
+                synchronize_session=False,
+            )
     db.commit()
-    return True
+    deleted_public_ids = (
+        [
+            row[0]
+            for row in db.query(MemoryItem.public_id)
+            .filter(
+                MemoryItem.id.in_(memory_ids),
+                MemoryItem.status == "deleted",
+            )
+            .all()
+        ]
+        if memory_ids
+        else []
+    )
+    return True, deleted_public_ids
 
 
 def rename_conversation(db: Session, public_id: str, user_id: int, title: str) -> Optional[Conversation]:
@@ -76,12 +131,16 @@ def add_message(
     content: str,
     retrieved_context: Optional[dict] = None,
     image_path: Optional[str] = None,
+    client_message_id: Optional[str] = None,
+    in_reply_to_id: Optional[int] = None,
 ) -> ChatMessage:
     message = ChatMessage(
         conversation_id=conversation_id,
         role=role,
         content=content,
         image_path=image_path,
+        client_message_id=client_message_id,
+        in_reply_to_id=in_reply_to_id,
         retrieved_context=json.dumps(retrieved_context, ensure_ascii=False) if retrieved_context else None,
     )
     db.add(message)
@@ -97,13 +156,124 @@ def add_message(
 
 
 def list_messages(db: Session, conversation_id: int, limit: int = 200) -> List[ChatMessage]:
-    return (
+    messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.conversation_id == conversation_id)
-        .order_by(ChatMessage.created_at.asc())
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(limit)
         .all()
     )
+    messages.reverse()
+    return messages
+
+
+def list_recent_messages(
+    db: Session,
+    conversation_id: int,
+    *,
+    limit: int = 12,
+    before_message_id: Optional[int] = None,
+) -> List[ChatMessage]:
+    query = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id)
+    if before_message_id is not None:
+        query = query.filter(ChatMessage.id < before_message_id)
+    messages = query.order_by(ChatMessage.id.desc()).limit(limit).all()
+    messages.reverse()
+    return messages
+
+
+def get_message_by_client_id(
+    db: Session,
+    conversation_id: int,
+    client_message_id: str,
+) -> Optional[ChatMessage]:
+    return (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.conversation_id == conversation_id,
+            ChatMessage.client_message_id == client_message_id,
+            ChatMessage.role == "user",
+        )
+        .first()
+    )
+
+
+def get_reply_for_message(db: Session, user_message_id: int) -> Optional[ChatMessage]:
+    return (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.in_reply_to_id == user_message_id,
+            ChatMessage.role == "assistant",
+        )
+        .order_by(ChatMessage.id.desc())
+        .first()
+    )
+
+
+def acquire_generation_lock(
+    db: Session,
+    conversation_id: int,
+    request_id: str,
+    ttl_seconds: int = 1800,
+) -> bool:
+    now = current_utc_time()
+    db.query(ChatGenerationLock).filter(
+        ChatGenerationLock.conversation_id == conversation_id,
+        ChatGenerationLock.expires_at <= now,
+    ).delete(synchronize_session=False)
+    db.flush()
+    db.add(
+        ChatGenerationLock(
+            conversation_id=conversation_id,
+            request_id=request_id,
+            expires_at=now + timedelta(seconds=ttl_seconds),
+        )
+    )
+    try:
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        return False
+
+
+def release_generation_lock(db: Session, conversation_id: int, request_id: str) -> None:
+    db.query(ChatGenerationLock).filter(
+        ChatGenerationLock.conversation_id == conversation_id,
+        ChatGenerationLock.request_id == request_id,
+    ).delete(synchronize_session=False)
+    db.commit()
+
+
+def get_conversation_summary(
+    db: Session,
+    conversation_id: int,
+) -> Optional[ConversationSummary]:
+    return (
+        db.query(ConversationSummary)
+        .filter(ConversationSummary.conversation_id == conversation_id)
+        .first()
+    )
+
+
+def upsert_conversation_summary(
+    db: Session,
+    conversation_id: int,
+    summary_text: str,
+    state_json: dict,
+    summarized_through_message_id: int,
+) -> ConversationSummary:
+    summary = get_conversation_summary(db, conversation_id)
+    if summary is None:
+        summary = ConversationSummary(conversation_id=conversation_id)
+        db.add(summary)
+    summary.summary_text = summary_text
+    summary.state_json = json.dumps(state_json, ensure_ascii=False)
+    summary.summarized_through_message_id = summarized_through_message_id
+    summary.version = (summary.version or 0) + 1
+    summary.updated_at = current_utc_time()
+    db.flush()
+    return summary
 
 
 def get_user_assistant_message(
