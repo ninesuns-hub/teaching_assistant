@@ -80,6 +80,9 @@ export async function sendChatMessage(payload, onEvent) {
   return {
     conversationId: donePayload.conversation_id || conversationId || null,
     messageId: donePayload.message_id || null,
+    userMessageId: donePayload.user_message_id || null,
+    assistantMessageId: donePayload.assistant_message_id || donePayload.message_id || null,
+    memoryContextCount: donePayload.memory_context_count || 0,
   }
 }
 

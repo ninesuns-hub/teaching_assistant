@@ -85,7 +85,7 @@ def _class_feedback_handler(db: Session, teacher_id: int) -> Callable[[int], str
 
 
 def build_agent_tools(
-    context_getter: Callable[[], dict],
+    context_getter: Callable[[], dict] | None,
     hybrid_searcher: HybridSearcher,
     query_course_admin,
     db: Session | None = None,

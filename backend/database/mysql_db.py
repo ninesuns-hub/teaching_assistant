@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Enum, ForeignKey, BigInteger, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Enum, ForeignKey, BigInteger, UniqueConstraint, Boolean, Float
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -211,22 +211,120 @@ class Conversation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     messages = relationship("ChatMessage", back_populates="conversation", cascade="all, delete-orphan")
+    summary = relationship("ConversationSummary", back_populates="conversation", cascade="all, delete-orphan", uselist=False)
 
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "client_message_id", name="uq_chat_client_message"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False, index=True)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     image_path = Column(String(300), nullable=True)
+    client_message_id = Column(String(36), nullable=True, index=True)
+    in_reply_to_id = Column(Integer, ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True, index=True)
     retrieved_context = Column(Text, nullable=True)
     feedback_type = Column(String(20), nullable=True)
     feedback_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class ConversationSummary(Base):
+    __tablename__ = "conversation_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    summary_text = Column(Text, nullable=False, default="")
+    state_json = Column(Text, nullable=True)
+    summarized_through_message_id = Column(Integer, nullable=True)
+    version = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    conversation = relationship("Conversation", back_populates="summary")
+
+
+class UserMemorySetting(Base):
+    __tablename__ = "user_memory_settings"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    backfill_status = Column(String(20), nullable=False, default="not_started")
+    backfill_processed = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+
+class MemoryItem(Base):
+    __tablename__ = "memory_items"
+    __table_args__ = (
+        UniqueConstraint("user_id", "class_id", "memory_type", "normalized_key", name="uq_memory_identity"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, nullable=False, index=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=True, index=True)
+    memory_type = Column(String(40), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    normalized_key = Column(String(255), nullable=False)
+    confidence = Column(Float, nullable=False, default=0.8)
+    importance = Column(Float, nullable=False, default=0.5)
+    status = Column(String(20), nullable=False, default="active", index=True)
+    expires_at = Column(DateTime, nullable=True)
+    version = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    evidence = relationship("MemoryEvidence", back_populates="memory", cascade="all, delete-orphan")
+
+
+class MemoryEvidence(Base):
+    __tablename__ = "memory_evidence"
+    __table_args__ = (
+        UniqueConstraint("memory_id", "message_id", name="uq_memory_message_evidence"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    memory_id = Column(Integer, ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id = Column(Integer, ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    evidence_excerpt = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+
+    memory = relationship("MemoryItem", back_populates="evidence")
+
+
+class MemoryJob(Base):
+    __tablename__ = "memory_jobs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    kind = Column(String(30), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True, index=True)
+    status = Column(String(20), nullable=False, default="queued", index=True)
+    dedupe_key = Column(String(160), nullable=False, unique=True)
+    checkpoint_message_id = Column(Integer, nullable=True)
+    processed_count = Column(Integer, nullable=False, default=0)
+    error_message = Column(String(300), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+
+class ChatGenerationLock(Base):
+    __tablename__ = "chat_generation_locks"
+
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True)
+    request_id = Column(String(36), nullable=False, unique=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=utc_now)
 
 
 class StudentLearningReport(Base):
@@ -340,6 +438,30 @@ def _migrate_schema():
         try:
             conn.execute(text(
                 "ALTER TABLE chat_messages ADD COLUMN feedback_at DATETIME NULL AFTER feedback_type"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE chat_messages ADD COLUMN client_message_id VARCHAR(36) NULL AFTER image_path"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE chat_messages ADD COLUMN in_reply_to_id INT NULL AFTER client_message_id"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "CREATE UNIQUE INDEX uq_chat_client_message ON chat_messages (conversation_id, client_message_id)"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "CREATE INDEX ix_chat_messages_in_reply_to_id ON chat_messages (in_reply_to_id)"
             ))
         except Exception:
             pass

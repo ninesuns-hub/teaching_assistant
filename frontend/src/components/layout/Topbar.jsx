@@ -13,6 +13,7 @@ export default function Topbar({
   onNavigate,
   onLogout,
   onOpenAuth,
+  onOpenMemory,
 }) {
   const navClass = ({ isActive }) => `nav-link ${isActive ? 'active' : ''}`
 
@@ -57,6 +58,11 @@ export default function Topbar({
                   <button type="button" className={language === 'zh' ? 'active' : ''} aria-pressed={language === 'zh'} onClick={() => setLanguage('zh')}>中文</button>
                 </div>
               </div>
+              {user && (
+                <button type="button" className="settings-memory-link" onClick={onOpenMemory}>
+                  {language === 'zh' ? '个性化记忆' : 'Personal memory'}
+                </button>
+              )}
             </div>
           )}
         </div>
