@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from app.interfaces.api.routes import router as chat_router
 from app.utils.logger import setup_logger
+from agent_core.config.settings import settings
 import uvicorn
 
 # 初始化全局日志
@@ -24,9 +25,14 @@ async def handle_database_error(request: Request, exc: SQLAlchemyError):
     )
 
 # 配置 CORS
+allowed_origins = [
+    origin.strip()
+    for origin in settings.ALLOWED_ORIGINS.split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

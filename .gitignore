@@ -8,6 +8,8 @@ env/
 venv/
 backend/.venv/
 .env
+.env.production
+.env.production.local
 
 # IDEs
 .vscode/

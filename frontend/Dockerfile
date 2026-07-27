@@ -8,7 +8,7 @@ COPY package*.json ./
 RUN npm config set fetch-retries 5 && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000 && \
-    npm install --registry=https://registry.npmmirror.com
+    npm ci --registry=https://registry.npmmirror.com
 
 # 拷贝源码并构建
 COPY . .
@@ -18,10 +18,8 @@ RUN npm run build
 FROM nginx:stable-alpine AS production-stage
 
 # 拷贝构建后的文件到 Nginx 目录
-COPY --from=build-stage /app/dist /usr/share/nginx/html
-
-# 拷贝自定义 Nginx 配置（可选，处理单页应用路由）
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build-stage /app/dist /usr/share/nginx/html/teaching_assistant
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

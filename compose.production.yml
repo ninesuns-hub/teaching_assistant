@@ -1,0 +1,163 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-backend-environment: &backend-environment
+  CHAT_API_KEY: ${CHAT_API_KEY:?Set CHAT_API_KEY}
+  CHAT_BASE_URL: ${CHAT_BASE_URL:?Set CHAT_BASE_URL}
+  CHAT_MODEL_NAME: ${CHAT_MODEL_NAME:?Set CHAT_MODEL_NAME}
+  EMBED_API_KEY: ${EMBED_API_KEY:?Set EMBED_API_KEY}
+  EMBED_BASE_URL: ${EMBED_BASE_URL:?Set EMBED_BASE_URL}
+  EMBED_MODEL_NAME: ${EMBED_MODEL_NAME:?Set EMBED_MODEL_NAME}
+  VISION_API_KEY: ${VISION_API_KEY:-}
+  VISION_BASE_URL: ${VISION_BASE_URL:-}
+  VISION_MODEL_NAME: ${VISION_MODEL_NAME:-gpt-4o}
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+  MYSQL_DB: ${MYSQL_DB:-Discrete}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+  JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+  ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS}
+  SMTP_HOST: ${SMTP_HOST:-smtp.qq.com}
+  SMTP_PORT: ${SMTP_PORT:-465}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  QDRANT_HOST: ${QDRANT_HOST:-localhost}
+  QDRANT_PORT: ${QDRANT_PORT:-6333}
+  QDRANT_PATH: /app/storage/processed/vector_db
+  QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION_NAME:-discrete_math_materials}
+  QDRANT_MEMORY_COLLECTION_NAME: ${QDRANT_MEMORY_COLLECTION_NAME:-assistant_memories}
+  TOP_K: ${TOP_K:-3}
+  MAX_TOKENS: ${MAX_TOKENS:-2048}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  CHAT_CONTEXT_ENABLED: ${CHAT_CONTEXT_ENABLED:-true}
+  CONVERSATION_SUMMARY_ENABLED: ${CONVERSATION_SUMMARY_ENABLED:-true}
+  MEMORY_WRITE_ENABLED: ${MEMORY_WRITE_ENABLED:-true}
+  MEMORY_READ_ENABLED: ${MEMORY_READ_ENABLED:-false}
+  CHAT_RECENT_MESSAGE_LIMIT: ${CHAT_RECENT_MESSAGE_LIMIT:-12}
+  CHAT_RECENT_TOKEN_LIMIT: ${CHAT_RECENT_TOKEN_LIMIT:-6000}
+  CHAT_SUMMARY_TOKEN_LIMIT: ${CHAT_SUMMARY_TOKEN_LIMIT:-1200}
+  CHAT_MEMORY_TOKEN_LIMIT: ${CHAT_MEMORY_TOKEN_LIMIT:-1000}
+  CHAT_OUTPUT_TOKEN_RESERVE: ${CHAT_OUTPUT_TOKEN_RESERVE:-2000}
+  MEMORY_RETRIEVAL_LIMIT: ${MEMORY_RETRIEVAL_LIMIT:-5}
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DB:-Discrete}
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - app
+
+  redis:
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - app
+
+  migrate:
+    build:
+      context: ./backend
+    environment: *backend-environment
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+    logging: *default-logging
+    networks:
+      - app
+
+  backend:
+    build:
+      context: ./backend
+    environment: *backend-environment
+    volumes:
+      - ${STORAGE_HOST_PATH:-/srv/teaching-assistant/storage}:/app/storage
+    expose:
+      - "8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/live', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *default-logging
+    networks:
+      - app
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/teaching_assistant/ >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - app
+
+networks:
+  app:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
