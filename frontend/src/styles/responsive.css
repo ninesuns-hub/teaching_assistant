@@ -68,6 +68,18 @@
     flex-direction: column-reverse;
   }
 
+  .resource-sort-controls {
+    width: 100%;
+  }
+
+  .resource-sort-controls label {
+    flex: 1;
+  }
+
+  .resource-sort-controls select {
+    width: 100%;
+  }
+
   .scene-dial-wrap {
     display: none;
   }
@@ -156,6 +168,11 @@
     align-items: stretch;
   }
 
+  .resource-sort-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .resource-library-tools .upload-btn {
     width: 100%;
   }
@@ -190,6 +207,7 @@
   }
 
   .resource-library-header .filter-bar {
+    width: 100%;
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
@@ -197,6 +215,11 @@
 
   .resource-library-header .filter-bar::-webkit-scrollbar {
     display: none;
+  }
+
+  .resource-library-header .filter-btn {
+    flex: 0 0 auto;
+    padding-inline: 14px;
   }
 
   .resources-grid {

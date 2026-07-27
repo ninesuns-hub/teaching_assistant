@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from database.mysql_db import HomeworkAssignment, HomeworkSubmission, User
+from database.mysql_db import HomeworkAssignment, HomeworkAttachment, HomeworkSubmission, User
 
 
 def create_homework(
@@ -33,6 +33,45 @@ def create_homework(
 
 def get_homework(db: Session, homework_id: int) -> Optional[HomeworkAssignment]:
     return db.query(HomeworkAssignment).filter(HomeworkAssignment.id == homework_id).first()
+
+
+def add_attachment(
+    db: Session,
+    homework_id: int,
+    filename: str,
+    file_path: str,
+    file_type: str,
+    file_size: int,
+) -> HomeworkAttachment:
+    attachment = HomeworkAttachment(
+        homework_id=homework_id,
+        filename=filename,
+        file_path=file_path,
+        file_type=file_type,
+        file_size=file_size,
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
+def list_attachments(db: Session, homework_id: int) -> List[HomeworkAttachment]:
+    return (
+        db.query(HomeworkAttachment)
+        .filter(HomeworkAttachment.homework_id == homework_id)
+        .order_by(HomeworkAttachment.id.asc())
+        .all()
+    )
+
+
+def get_attachment(
+    db: Session, homework_id: int, attachment_id: int
+) -> Optional[HomeworkAttachment]:
+    return db.query(HomeworkAttachment).filter(
+        HomeworkAttachment.id == attachment_id,
+        HomeworkAttachment.homework_id == homework_id,
+    ).first()
 
 
 def list_homeworks(db: Session, class_id: int) -> List[HomeworkAssignment]:

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "binary_relation_properties",
+    "question": "怎样依次判断二元关系的自反性、对称性和传递性？",
+    "expects_sources": true,
+    "expects_mermaid": true,
+    "required_terms": ["自反", "对称", "传递"]
+  },
+  {
+    "id": "hasse_diagram",
+    "question": "请解释 Hasse 图的画法，并给一个 Mermaid 示例。",
+    "expects_sources": true,
+    "expects_mermaid": true,
+    "required_terms": ["偏序", "覆盖"]
+  },
+  {
+    "id": "euler_hamilton",
+    "question": "比较欧拉回路与哈密顿回路。",
+    "expects_sources": true,
+    "expects_mermaid": true,
+    "required_terms": ["边", "顶点"]
+  },
+  {
+    "id": "course_grading",
+    "question": "课程评分由哪些部分组成？",
+    "expects_sources": false,
+    "expects_mermaid": false,
+    "required_terms": ["成绩"]
+  },
+  {
+    "id": "binary_tree",
+    "question": "什么是二叉树？请用具体例子说明。",
+    "expects_sources": true,
+    "expects_mermaid": true,
+    "required_terms": ["根", "孩子"]
+  }
+]

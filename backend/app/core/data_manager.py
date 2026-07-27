@@ -1,6 +1,8 @@
 import os
 import shutil
 import logging
+import uuid
+import hashlib
 from typing import List, Dict, Any
 from agent_core.config.settings import settings
 from agent_core.rag.processor import DocumentProcessor
@@ -30,6 +32,18 @@ class DataManager:
         ]
         for d in dirs:
             os.makedirs(d, exist_ok=True)
+
+    @staticmethod
+    def calculate_content_hash(file_content: bytes) -> str:
+        return hashlib.sha256(file_content).hexdigest()
+
+    @staticmethod
+    def calculate_file_hash(file_path: str) -> str:
+        digest = hashlib.sha256()
+        with open(file_path, "rb") as file_obj:
+            for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     def save_course_file(self, file_content: bytes, filename: str, auto_ingest: bool = True):
         """
@@ -94,27 +108,95 @@ class DataManager:
             logger.error(f"保存作业文件失败: {e}")
             return {"status": "error", "message": str(e)}
 
-    def ingest_file(self, file_path: str):
+    def save_homework_attachment(
+        self,
+        file_content: bytes,
+        filename: str,
+        class_id: int,
+        homework_id: int,
+    ):
+        """使用唯一物理文件名保存作业附件，同时保留原始展示名称。"""
+        target_dir = os.path.join(
+            settings.HOMEWORK_DIR,
+            str(class_id),
+            "assignments",
+            str(homework_id),
+        )
+        os.makedirs(target_dir, exist_ok=True)
+        safe_name = os.path.basename(filename)
+        ext = os.path.splitext(safe_name)[1].lower()
+        target_path = os.path.join(target_dir, f"{uuid.uuid4().hex}{ext}")
+        try:
+            with open(target_path, "wb") as file_obj:
+                file_obj.write(file_content)
+            return {"status": "success", "path": target_path}
+        except Exception as exc:
+            logger.error("保存作业附件失败: %s", exc)
+            return {"status": "error", "message": str(exc)}
+
+    def ingest_file(self, file_path: str, metadata: Dict[str, Any] | None = None):
         """
         手动触发单个文件的 RAG 入库
         """
         logger.info(f"开始处理文件入库: {file_path}")
         ext = file_path.lower()
         chunks = []
+        artifact_name = None
+        if metadata and metadata.get("source_key"):
+            artifact_name = str(metadata["source_key"]).replace(":", "_")
 
         if ext.endswith((".pptx", ".ppsx")):
-            chunks = self.processor.pptx_parser.parse(file_path)
+            chunks = self.processor.pptx_parser.parse(file_path, artifact_name=artifact_name)
         elif ext.endswith(".pdf"):
-            chunks = self.processor.pdf_parser.parse(file_path)
+            chunks = self.processor.pdf_parser.parse(file_path, artifact_name=artifact_name)
         else:
             logger.warning(f"暂不支持的文件格式: {file_path}")
-            return
+            return False
 
         if chunks:
+            if metadata:
+                for chunk in chunks:
+                    chunk["metadata"] = {
+                        **chunk.get("metadata", {}),
+                        **metadata,
+                    }
             self.searcher.add_documents(chunks)
             logger.info(f"文件 {file_path} 已成功集成至 RAG 系统")
+            return True
         else:
             logger.warning(f"文件 {file_path} 解析结果为空")
+            return False
+
+    def delete_class_material_index(self, class_id: int, material_id: int):
+        """删除指定班级资料在向量与关键词检索中的内容。"""
+        self.searcher.delete_material_documents(class_id, material_id)
+        artifact_path = os.path.join(
+            settings.CHUNKS_DIR,
+            f"class_{class_id}_material_{material_id}.md",
+        )
+        if os.path.isfile(artifact_path):
+            os.remove(artifact_path)
+
+    def update_document_access(
+        self,
+        content_hash: str,
+        scope_keys: list[str],
+        sources: list[dict],
+    ):
+        self.searcher.update_document_access(
+            content_hash,
+            scope_keys,
+            sources,
+        )
+
+    def delete_document_index(self, content_hash: str):
+        self.searcher.delete_document(content_hash)
+        artifact_path = os.path.join(
+            settings.CHUNKS_DIR,
+            f"document_{content_hash}.md",
+        )
+        if os.path.isfile(artifact_path):
+            os.remove(artifact_path)
 
     def get_all_course_files(self) -> List[str]:
         """获取所有已上传的课程文件列表"""

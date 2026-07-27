@@ -1,7 +1,7 @@
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -106,6 +106,50 @@ def list_messages(db: Session, conversation_id: int, limit: int = 200) -> List[C
     )
 
 
+def get_user_assistant_message(
+    db: Session,
+    public_id: str,
+    message_id: int,
+    user_id: int,
+) -> Optional[ChatMessage]:
+    conversation = get_conversation(db, public_id, user_id)
+    if not conversation:
+        return None
+    return (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.id == message_id,
+            ChatMessage.conversation_id == conversation.id,
+            ChatMessage.role == "assistant",
+        )
+        .first()
+    )
+
+
+def get_user_assistant_message_for_update(
+    db: Session,
+    public_id: str,
+    message_id: int,
+    user_id: int,
+) -> Optional[ChatMessage]:
+    return (
+        db.query(ChatMessage)
+        .join(Conversation, ChatMessage.conversation_id == Conversation.id)
+        .filter(
+            Conversation.public_id == public_id,
+            Conversation.user_id == user_id,
+            ChatMessage.id == message_id,
+            ChatMessage.role == "assistant",
+        )
+        .with_for_update()
+        .first()
+    )
+
+
+def current_utc_time() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def update_message_feedback(
     db: Session,
     conversation_id: int,
@@ -156,10 +200,11 @@ def get_student_messages_in_class(
     messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.conversation_id.in_(conv_ids))
-        .order_by(ChatMessage.created_at.asc())
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(limit)
         .all()
     )
+    messages.reverse()
     return [
         {
             "role": m.role,

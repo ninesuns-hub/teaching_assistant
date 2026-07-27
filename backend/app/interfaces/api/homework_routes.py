@@ -1,10 +1,14 @@
 import mimetypes
 import os
+import shutil
 from datetime import datetime
+from html import escape
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from docx import Document
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
+from pptx import Presentation
 from sqlalchemy.orm import Session
 
 from app.core.data_manager import data_manager
@@ -12,7 +16,7 @@ from app.core.deps import get_current_user, require_role
 from agent_core.config.settings import settings
 from database import class_repo, homework_repo
 from database.mysql_db import User, UserRole, get_db
-from .schemas import HomeworkResponse, HomeworkSubmissionResponse
+from .schemas import HomeworkAttachmentResponse, HomeworkResponse, HomeworkSubmissionResponse
 
 router = APIRouter()
 
@@ -32,7 +36,24 @@ def _parse_due_at(raw: Optional[str]) -> Optional[datetime]:
             raise HTTPException(status_code=400, detail="截止日期格式无效") from exc
 
 
-def _serialize_homework(hw, submission_count: int = 0, my_submission: dict | None = None) -> HomeworkResponse:
+def _serialize_attachment(attachment) -> HomeworkAttachmentResponse:
+    return HomeworkAttachmentResponse(
+        id=attachment.id,
+        filename=attachment.filename,
+        file_type=attachment.file_type,
+        file_size=attachment.file_size or 0,
+    )
+
+
+def _serialize_homework(
+    hw,
+    attachments: list | None = None,
+    submission_count: int = 0,
+    my_submission: dict | None = None,
+) -> HomeworkResponse:
+    serialized_attachments = [
+        _serialize_attachment(item) for item in (attachments or [])
+    ]
     return HomeworkResponse(
         id=hw.id,
         class_id=hw.class_id,
@@ -40,11 +61,63 @@ def _serialize_homework(hw, submission_count: int = 0, my_submission: dict | Non
         description=hw.description,
         due_at=hw.due_at.isoformat() if hw.due_at else None,
         attachment_name=hw.attachment_name,
-        has_attachment=bool(hw.attachment_path),
+        has_attachment=bool(serialized_attachments or hw.attachment_path),
+        attachments=serialized_attachments,
         created_at=hw.created_at.isoformat() if hw.created_at else "",
         submission_count=submission_count,
         my_submission=my_submission,
     )
+
+
+def _preview_html(filename: str, blocks: list[tuple[str, str]]) -> str:
+    sections = "".join(
+        f"<section><h2>{escape(title)}</h2><div>{body}</div></section>"
+        for title, body in blocks
+    )
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape(filename)}</title>
+  <style>
+    body {{ margin: 0; padding: 24px; font-family: system-ui, sans-serif; background: #f5f7fa; color: #172033; }}
+    main {{ width: min(960px, 100%); margin: auto; }}
+    h1 {{ font-size: 22px; }}
+    section {{ margin: 16px 0; padding: 20px; border-radius: 12px; background: white; box-shadow: 0 4px 18px rgba(20,30,50,.08); }}
+    h2 {{ margin-top: 0; font-size: 15px; color: #456; }}
+    div {{ line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }}
+  </style>
+</head>
+<body><main><h1>{escape(filename)}</h1>{sections}</main></body>
+</html>"""
+
+
+def _build_office_preview(file_path: str, filename: str, ext: str) -> str:
+    blocks: list[tuple[str, str]] = []
+    if ext in {".pptx", ".ppsx"}:
+        presentation = Presentation(file_path)
+        for index, slide in enumerate(presentation.slides, start=1):
+            text = "\n".join(
+                shape.text.strip()
+                for shape in slide.shapes
+                if hasattr(shape, "text") and shape.text.strip()
+            )
+            blocks.append((f"幻灯片 {index}", escape(text or "（无可提取文字）")))
+    elif ext == ".docx":
+        document = Document(file_path)
+        text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+        blocks.append(("文档内容", escape(text or "（无可提取文字）")))
+    return _preview_html(filename, blocks)
+
+
+def _remove_file_if_safe(path: str | None) -> None:
+    if not path:
+        return
+    resolved = os.path.realpath(path)
+    base_dir = os.path.realpath(settings.HOMEWORK_DIR)
+    if os.path.commonpath([resolved, base_dir]) == base_dir and os.path.isfile(resolved):
+        os.remove(resolved)
 
 
 @router.get("/classes/{class_id}/homeworks", response_model=list[HomeworkResponse])
@@ -71,7 +144,13 @@ def list_homeworks(
                     "has_file": bool(mine.file_path),
                     "submitted_at": mine.submitted_at.isoformat() if mine.submitted_at else None,
                 }
-        result.append(_serialize_homework(hw, submission_count=len(subs), my_submission=my_sub))
+        attachments = homework_repo.list_attachments(db, hw.id)
+        result.append(_serialize_homework(
+            hw,
+            attachments=attachments,
+            submission_count=len(subs),
+            my_submission=my_sub,
+        ))
     return result
 
 
@@ -81,6 +160,7 @@ async def create_homework(
     title: str = Form(...),
     description: str = Form(""),
     due_at: str = Form(""),
+    files: list[UploadFile] | None = File(None),
     file: UploadFile | None = File(None),
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
@@ -90,18 +170,17 @@ async def create_homework(
     if not title.strip():
         raise HTTPException(status_code=400, detail="请填写作业标题")
 
-    attachment_path = None
-    attachment_name = None
+    incoming_files = [item for item in (files or []) if item and item.filename]
     if file and file.filename:
-        ext = os.path.splitext(file.filename)[1].lower()
+        incoming_files.append(file)
+
+    normalized_files: list[tuple[UploadFile, str, str]] = []
+    for upload in incoming_files:
+        filename = os.path.basename(upload.filename or "").strip()
+        ext = os.path.splitext(filename)[1].lower()
         if ext not in ALLOWED_EXTS:
-            raise HTTPException(status_code=400, detail="不支持的附件格式")
-        content = await file.read()
-        saved = data_manager.save_homework_file(content, file.filename, class_id, kind="assignment")
-        if saved["status"] != "success":
-            raise HTTPException(status_code=500, detail=saved.get("message", "附件保存失败"))
-        attachment_path = saved["path"]
-        attachment_name = file.filename
+            raise HTTPException(status_code=400, detail=f"不支持的附件格式: {filename}")
+        normalized_files.append((upload, filename, ext))
 
     hw = homework_repo.create_homework(
         db=db,
@@ -110,10 +189,44 @@ async def create_homework(
         description=description,
         due_at=_parse_due_at(due_at),
         created_by=current_user.id,
-        attachment_path=attachment_path,
-        attachment_name=attachment_name,
+        attachment_path=None,
+        attachment_name=None,
     )
-    return _serialize_homework(hw)
+    saved_paths: list[str] = []
+    attachments = []
+    try:
+        for upload, filename, ext in normalized_files:
+            content = await upload.read()
+            saved = data_manager.save_homework_attachment(
+                content,
+                filename,
+                class_id,
+                hw.id,
+            )
+            if saved["status"] != "success":
+                raise RuntimeError(saved.get("message", "附件保存失败"))
+            saved_paths.append(saved["path"])
+            attachments.append(homework_repo.add_attachment(
+                db,
+                homework_id=hw.id,
+                filename=filename,
+                file_path=saved["path"],
+                file_type=ext.lstrip("."),
+                file_size=len(content),
+            ))
+
+        if attachments:
+            hw.attachment_path = attachments[0].file_path
+            hw.attachment_name = attachments[0].filename
+            db.commit()
+            db.refresh(hw)
+    except Exception as exc:
+        for path in saved_paths:
+            _remove_file_if_safe(path)
+        homework_repo.delete_homework(db, hw)
+        raise HTTPException(status_code=500, detail=f"发布作业失败: {exc}") from exc
+
+    return _serialize_homework(hw, attachments=attachments)
 
 
 @router.delete("/homeworks/{homework_id}")
@@ -127,8 +240,73 @@ def delete_homework(
         raise HTTPException(status_code=404, detail="作业不存在")
     if not class_repo.user_owns_class(db, current_user, hw.class_id):
         raise HTTPException(status_code=403, detail="无权删除该作业")
+    paths = {
+        hw.attachment_path,
+        *(attachment.file_path for attachment in hw.attachments),
+        *(submission.file_path for submission in hw.submissions),
+    }
+    for path in paths:
+        _remove_file_if_safe(path)
+    assignment_dir = os.path.join(
+        settings.HOMEWORK_DIR,
+        str(hw.class_id),
+        "assignments",
+        str(hw.id),
+    )
+    resolved_dir = os.path.realpath(assignment_dir)
+    base_dir = os.path.realpath(settings.HOMEWORK_DIR)
+    if os.path.commonpath([resolved_dir, base_dir]) == base_dir and os.path.isdir(resolved_dir):
+        shutil.rmtree(resolved_dir)
     homework_repo.delete_homework(db, hw)
     return {"ok": True}
+
+
+@router.get("/homeworks/{homework_id}/attachments/{attachment_id}/file")
+def get_homework_attachment_file(
+    homework_id: int,
+    attachment_id: int,
+    download: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    hw = homework_repo.get_homework(db, homework_id)
+    if not hw:
+        raise HTTPException(status_code=404, detail="作业不存在")
+    if not class_repo.user_can_access_class(db, current_user, hw.class_id):
+        raise HTTPException(status_code=403, detail="无权访问")
+    attachment = homework_repo.get_attachment(db, homework_id, attachment_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="附件不存在")
+
+    file_path = os.path.realpath(attachment.file_path)
+    base_dir = os.path.realpath(settings.HOMEWORK_DIR)
+    if os.path.commonpath([file_path, base_dir]) != base_dir or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="附件文件缺失")
+    ext = os.path.splitext(attachment.filename)[1].lower()
+    media_type = mimetypes.guess_type(attachment.filename)[0] or "application/octet-stream"
+
+    if download:
+        return FileResponse(
+            file_path,
+            filename=attachment.filename,
+            media_type=media_type,
+            content_disposition_type="attachment",
+        )
+    if ext in {".pdf", ".png", ".jpg", ".jpeg"}:
+        return FileResponse(
+            file_path,
+            filename=attachment.filename,
+            media_type=media_type,
+            content_disposition_type="inline",
+        )
+    if ext in {".pptx", ".ppsx", ".docx"}:
+        try:
+            return HTMLResponse(_build_office_preview(
+                file_path, attachment.filename, ext
+            ))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"生成预览失败: {exc}") from exc
+    raise HTTPException(status_code=400, detail="该附件格式不支持在线预览，请下载后查看")
 
 
 @router.get("/homeworks/{homework_id}/attachment")

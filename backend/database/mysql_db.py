@@ -8,7 +8,7 @@ import enum
 import secrets
 import string
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from agent_core.config.settings import settings
 
 SQLALCHEMY_DATABASE_URL = f"mysql+mysqlconnector://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DB}"
@@ -29,6 +29,10 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UserRole(enum.Enum):
@@ -106,10 +110,44 @@ class ClassMaterial(Base):
     file_path = Column(String(500), nullable=False)
     file_type = Column(String(20), nullable=False)
     file_size = Column(BigInteger, default=0)
+    content_hash = Column(String(64), nullable=True, index=True)
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     classroom = relationship("ClassRoom", back_populates="materials")
+
+
+class RagDocument(Base):
+    __tablename__ = "rag_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    content_hash = Column(String(64), unique=True, nullable=False, index=True)
+    file_type = Column(String(20), nullable=False)
+    file_size = Column(BigInteger, default=0)
+    index_status = Column(String(20), nullable=False, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sources = relationship(
+        "RagDocumentSource",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+
+class RagDocumentSource(Base):
+    __tablename__ = "rag_document_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("rag_documents.id"), nullable=False, index=True)
+    scope_type = Column(String(20), nullable=False, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=True, index=True)
+    material_id = Column(Integer, ForeignKey("class_materials.id"), nullable=True, unique=True, index=True)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    document = relationship("RagDocument", back_populates="sources")
 
 
 class HomeworkAssignment(Base):
@@ -126,7 +164,22 @@ class HomeworkAssignment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     classroom = relationship("ClassRoom", back_populates="homeworks")
+    attachments = relationship("HomeworkAttachment", back_populates="homework", cascade="all, delete-orphan")
     submissions = relationship("HomeworkSubmission", back_populates="homework", cascade="all, delete-orphan")
+
+
+class HomeworkAttachment(Base):
+    __tablename__ = "homework_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    homework_id = Column(Integer, ForeignKey("homework_assignments.id"), nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_type = Column(String(20), nullable=False)
+    file_size = Column(BigInteger, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    homework = relationship("HomeworkAssignment", back_populates="attachments")
 
 
 class HomeworkSubmission(Base):
@@ -201,6 +254,24 @@ class ClassLearningFeedback(Base):
     student_count = Column(Integer, default=0)
     status = Column(String(20), nullable=False, default="completed")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LearningGenerationJob(Base):
+    __tablename__ = "learning_generation_jobs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    kind = Column(String(30), nullable=False, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    requested_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="queued", index=True)
+    dedupe_key = Column(String(100), nullable=True, unique=True)
+    result_id = Column(Integer, nullable=True)
+    error_message = Column(String(300), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 def generate_invite_code(length: int = 6) -> str:
@@ -298,6 +369,43 @@ def _migrate_schema():
             ))
         except Exception:
             pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE class_materials ADD COLUMN content_hash VARCHAR(64) NULL AFTER file_size"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "CREATE INDEX ix_class_materials_content_hash ON class_materials (content_hash)"
+            ))
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                """
+                INSERT INTO homework_attachments
+                    (homework_id, filename, file_path, file_type, file_size, created_at)
+                SELECT
+                    h.id,
+                    COALESCE(h.attachment_name, 'attachment'),
+                    h.attachment_path,
+                    LOWER(SUBSTRING_INDEX(COALESCE(h.attachment_name, ''), '.', -1)),
+                    0,
+                    COALESCE(h.created_at, UTC_TIMESTAMP())
+                FROM homework_assignments h
+                WHERE h.attachment_path IS NOT NULL
+                  AND h.attachment_path <> ''
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM homework_attachments a
+                      WHERE a.homework_id = h.id
+                        AND a.file_path = h.attachment_path
+                  )
+                """
+            ))
+        except Exception as exc:
+            logger.warning("迁移旧作业附件失败: %s", exc)
         conn.commit()
 
 

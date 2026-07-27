@@ -1,0 +1,14 @@
+[
+  {"id": "knowledge_relation", "intent": "course_knowledge", "question": "怎样判断二元关系是否具有传递性？", "expects_mermaid": true},
+  {"id": "knowledge_graph", "intent": "course_knowledge", "question": "欧拉回路和哈密顿回路有什么区别？", "expects_mermaid": true},
+  {"id": "knowledge_proof", "intent": "course_knowledge", "question": "请证明每棵树都有至少两个叶节点。", "expects_mermaid": false},
+  {"id": "admin_grading", "intent": "course_admin", "question": "这门课平时成绩占多少比例？"},
+  {"id": "admin_teacher", "intent": "course_admin", "question": "授课教师是谁，答疑时间是什么时候？"},
+  {"id": "admin_schedule", "intent": "course_admin", "question": "图论安排在第几周学习？"},
+  {"id": "general_greeting", "intent": "general", "question": "你好，你能帮我做什么？"},
+  {"id": "general_offtopic", "intent": "general", "question": "今天天气怎么样？"},
+  {"id": "image_question", "intent": "image", "question": "请分析图片中的关系图。", "requires_image": true},
+  {"id": "learning_student", "intent": "learning_analysis", "question": "请生成我的阶段学情报告。"},
+  {"id": "learning_class", "intent": "learning_analysis", "question": "请分析当前班级的常见薄弱点。", "role": "teacher"},
+  {"id": "ambiguous_multi", "intent": "multi_or_ambiguous", "question": "结合评分要求和课件内容，告诉我图论这一章应该重点复习什么。"}
+]

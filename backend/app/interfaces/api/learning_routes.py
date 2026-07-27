@@ -1,16 +1,27 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from database.mysql_db import get_db, User, UserRole
 from database import class_repo, conversation_repo, learning_repo
 from app.core.deps import get_current_user, require_role
 from app.services.learning_service import (
-    generate_student_report_record as generate_student_report,
-    generate_class_feedback_record as generate_class_feedback,
     _serialize_report,
     _serialize_feedback,
 )
-from .schemas import StudentBriefResponse, LearningReportResponse, ClassFeedbackResponse, AddStudentRequest
+from app.services.learning_jobs import (
+    CLASS_FEEDBACK_JOB,
+    STUDENT_REPORT_JOB,
+    enqueue_class_feedback,
+    enqueue_student_report,
+    serialize_learning_job,
+)
+from .schemas import (
+    AddStudentRequest,
+    ClassFeedbackResponse,
+    LearningGenerationJobResponse,
+    LearningReportResponse,
+    StudentBriefResponse,
+)
 
 router = APIRouter()
 
@@ -88,7 +99,11 @@ def remove_class_student(
     return {"ok": True}
 
 
-@router.post("/classes/{class_id}/students/{student_id}/report", response_model=LearningReportResponse)
+@router.post(
+    "/classes/{class_id}/students/{student_id}/report",
+    response_model=LearningGenerationJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def create_student_report(
     class_id: int,
     student_id: int,
@@ -99,10 +114,13 @@ def create_student_report(
     member_ids = {s["id"] for s in class_repo.list_class_students(db, class_id)}
     if student_id not in member_ids:
         raise HTTPException(status_code=400, detail="该学生不在本班级中")
-    try:
-        return generate_student_report(db, student_id, class_id, current_user.id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    job = enqueue_student_report(
+        db,
+        class_id=class_id,
+        student_id=student_id,
+        requested_by=current_user.id,
+    )
+    return serialize_learning_job(db, job, include_result=False)
 
 
 @router.get("/classes/{class_id}/students/{student_id}/reports", response_model=list[LearningReportResponse])
@@ -146,17 +164,23 @@ def get_report_detail(
     return _serialize_report(report, student_name)
 
 
-@router.post("/classes/{class_id}/feedback", response_model=ClassFeedbackResponse)
+@router.post(
+    "/classes/{class_id}/feedback",
+    response_model=LearningGenerationJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def create_class_feedback(
     class_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db),
 ):
     _ensure_teacher_class_access(db, current_user, class_id)
-    try:
-        return generate_class_feedback(db, class_id, current_user.id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    job = enqueue_class_feedback(
+        db,
+        class_id=class_id,
+        requested_by=current_user.id,
+    )
+    return serialize_learning_job(db, job, include_result=False)
 
 
 @router.get("/classes/{class_id}/feedback", response_model=list[ClassFeedbackResponse])
@@ -184,7 +208,11 @@ def get_feedback_detail(
     return _serialize_feedback(feedback)
 
 
-@router.post("/me/report", response_model=LearningReportResponse)
+@router.post(
+    "/me/report",
+    response_model=LearningGenerationJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def create_my_report(
     class_id: int = Query(...),
     current_user: User = Depends(require_role(UserRole.STUDENT)),
@@ -192,10 +220,39 @@ def create_my_report(
 ):
     if not class_repo.user_can_access_class(db, current_user, class_id):
         raise HTTPException(status_code=403, detail="您未加入该班级")
-    try:
-        return generate_student_report(db, current_user.id, class_id, current_user.id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    reports = learning_repo.list_student_reports(
+        db, current_user.id, class_id, limit=1
+    )
+    if reports:
+        total_message_count = conversation_repo.count_student_messages_in_class(
+            db, current_user.id, class_id
+        )
+        if total_message_count <= reports[0].message_count:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="暂无新的学习记录，请先继续学习交流",
+            )
+    job = enqueue_student_report(
+        db,
+        class_id=class_id,
+        student_id=current_user.id,
+        requested_by=current_user.id,
+    )
+    return serialize_learning_job(db, job, include_result=False)
+
+
+@router.get("/jobs/{job_id}", response_model=LearningGenerationJobResponse)
+def get_learning_generation_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = learning_repo.get_learning_job(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="学情任务不存在")
+    if job.requested_by != current_user.id:
+        raise HTTPException(status_code=403, detail="无权查看该学情任务")
+    return serialize_learning_job(db, job)
 
 @router.get("/assistant-status")
 def get_learning_assistant_status(
@@ -218,6 +275,12 @@ def get_learning_assistant_status(
         )
         reports = learning_repo.list_student_reports(db, current_user.id, class_id, limit=1)
         latest_report = _serialize_report(reports[0], current_user.name) if reports else None
+        active_job = learning_repo.get_active_learning_job(
+            db,
+            kind=STUDENT_REPORT_JOB,
+            class_id=class_id,
+            student_id=current_user.id,
+        )
         return {
             "role": "student",
             "class_id": class_id,
@@ -225,6 +288,10 @@ def get_learning_assistant_status(
             "can_generate": effective_count >= readiness_threshold,
             "has_updates": bool(latest_report and total_message_count > latest_report["message_count"]),
             "latest_report": latest_report,
+            "generation_job": (
+                serialize_learning_job(db, active_job, include_result=False)
+                if active_job else None
+            ),
         }
 
     if current_user.role == UserRole.TEACHER:
@@ -236,15 +303,30 @@ def get_learning_assistant_status(
                 db, student["id"], class_id
             )
             reports = learning_repo.list_student_reports(db, student["id"], class_id, limit=1)
+            active_job = learning_repo.get_active_learning_job(
+                db,
+                kind=STUDENT_REPORT_JOB,
+                class_id=class_id,
+                student_id=student["id"],
+            )
             student_states.append({
                 "id": student["id"],
                 "name": student["name"],
                 "effective_question_count": effective_count,
                 "ready": effective_count >= readiness_threshold,
                 "latest_report": _serialize_report(reports[0], student["name"]) if reports else None,
+                "generation_job": (
+                    serialize_learning_job(db, active_job, include_result=False)
+                    if active_job else None
+                ),
             })
 
         feedbacks = learning_repo.list_class_feedback(db, class_id, limit=1)
+        active_feedback_job = learning_repo.get_active_learning_job(
+            db,
+            kind=CLASS_FEEDBACK_JOB,
+            class_id=class_id,
+        )
         active_students = sum(1 for student in student_states if student["effective_question_count"] > 0)
         return {
             "role": "teacher",
@@ -261,6 +343,10 @@ def get_learning_assistant_status(
                 reverse=True,
             ),
             "latest_feedback": _serialize_feedback(feedbacks[0]) if feedbacks else None,
+            "generation_job": (
+                serialize_learning_job(db, active_feedback_job, include_result=False)
+                if active_feedback_job else None
+            ),
         }
 
     raise HTTPException(status_code=400, detail="请先选择身份")

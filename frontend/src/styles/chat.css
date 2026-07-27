@@ -380,9 +380,9 @@
 }
 
 .markdown-message blockquote {
-  border-left: 3px solid rgba(255, 255, 255, 0.28);
+  border-left: 3px solid var(--color-border-strong);
   padding-left: 12px;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--color-text-primary);
 }
 
 .markdown-message code {
@@ -397,9 +397,12 @@
 
 .markdown-message pre {
   overflow-x: auto;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-control);
-  background: rgba(0, 0, 0, 0.32);
+  background: color-mix(in srgb, var(--color-surface-2) 92%, var(--color-accent) 8%);
+  color: var(--color-text-primary);
   padding: 14px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 4%, transparent);
 }
 
 .markdown-message pre code {
@@ -434,7 +437,7 @@
   padding: 4px 0;
 }
 
-.mermaid-diagram {
+.mermaid-surface {
   max-width: 100%;
   margin: 10px 0 14px;
   overflow-x: auto;
@@ -447,26 +450,17 @@
     inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 5%, transparent);
 }
 
+.mermaid-result {
+  max-width: 100%;
+}
+
 /* Fallback for renderers that retain ReactMarkdown's fenced-code wrapper. */
-.markdown-message pre:has(> .mermaid-diagram) {
+.markdown-message pre:has(.mermaid-diagram) {
   margin: 0;
   padding: 0;
   overflow: visible;
   border-radius: 0;
   background: transparent;
-}
-
-.mermaid-fallback {
-  max-width: 100%;
-  margin: 10px 0 14px;
-  overflow-x: auto;
-  border-radius: var(--radius-control);
-  border: 1px solid var(--color-border-subtle);
-  background: color-mix(in srgb, var(--color-surface-2) 88%, transparent);
-  padding: 14px;
-  box-shadow:
-    var(--shadow-panel),
-    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 5%, transparent);
 }
 
 .mermaid-diagram svg {
@@ -477,10 +471,87 @@
   background: transparent !important;
 }
 
+.mermaid-diagram {
+  max-height: min(72vh, 720px);
+  overflow: auto;
+}
+
 .mermaid-error {
   margin-bottom: 10px;
-  color: #ffd18a;
+  color: var(--color-status-pending);
+  font-weight: 650;
   font-size: 13px;
+}
+
+.mermaid-fallback pre {
+  margin: 0 0 12px;
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 14%, transparent);
+  background: color-mix(in srgb, var(--color-surface-1) 45%, transparent);
+  color: var(--color-text-primary);
+}
+
+.mermaid-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mermaid-actions button {
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 22%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-1) 72%, transparent);
+  color: var(--color-text-primary);
+  padding: 6px 11px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.mermaid-actions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent) 52%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-1));
+}
+
+.mermaid-actions button:disabled {
+  cursor: not-allowed;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-bg);
+  border-color: var(--color-disabled-border);
+}
+
+.mermaid-repair-feedback {
+  margin-top: 9px;
+  color: var(--color-status-pending);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.mermaid-save-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 28px;
+  margin: -8px 2px 10px;
+  color: var(--color-status-pending);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mermaid-save-status.is-saved {
+  color: var(--color-status-done);
+}
+
+.mermaid-save-status button {
+  border: 1px solid color-mix(in srgb, var(--color-status-pending) 55%, var(--color-border-strong));
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-1) 72%, transparent);
+  color: var(--color-text-primary);
+  padding: 5px 9px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
 }
 
 .composer {

@@ -1,6 +1,54 @@
-import { getToken } from './httpClient'
+import { getToken, request } from './httpClient'
 
-export async function sendChatMessage(payload, onChunk) {
+async function consumeChatStream(response, onEvent) {
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  const isSseV1 = response.headers.get('X-Chat-Stream-Protocol') === 'sse-v1'
+  let buffer = ''
+  let donePayload = {}
+
+  if (!isSseV1) {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const delta = decoder.decode(value, { stream: true })
+      if (delta) onEvent?.({ type: 'content', delta })
+    }
+    return donePayload
+  }
+
+  const dispatchFrame = (frame) => {
+    if (!frame.trim()) return
+    let type = 'message'
+    const dataLines = []
+    frame.split(/\r?\n/).forEach((line) => {
+      if (line.startsWith('event:')) type = line.slice(6).trim()
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
+    })
+    if (!dataLines.length) return
+    let payload
+    try {
+      payload = JSON.parse(dataLines.join('\n'))
+    } catch {
+      payload = { message: dataLines.join('\n') }
+    }
+    if (type === 'done') donePayload = payload
+    onEvent?.({ type, ...payload })
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+    const frames = buffer.split(/\r?\n\r?\n/)
+    buffer = frames.pop() || ''
+    frames.forEach(dispatchFrame)
+    if (done) break
+  }
+  if (buffer.trim()) dispatchFrame(buffer)
+  return donePayload
+}
+
+export async function sendChatMessage(payload, onEvent) {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
   const token = getToken()
   const response = await fetch(`${API_BASE_URL}/api/chat`, {
@@ -28,18 +76,11 @@ export async function sendChatMessage(payload, onChunk) {
   }
 
   const conversationId = response.headers.get('X-Conversation-Id')
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const chunk = decoder.decode(value, { stream: true })
-    if (onChunk) onChunk(chunk)
+  const donePayload = await consumeChatStream(response, onEvent)
+  return {
+    conversationId: donePayload.conversation_id || conversationId || null,
+    messageId: donePayload.message_id || null,
   }
-
-  return conversationId || null
 }
 
 export async function sendWelcomeMessage(classId, onChunk, signal) {
@@ -65,13 +106,24 @@ export async function sendWelcomeMessage(classId, onChunk, signal) {
     throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
   }
 
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
+  await consumeChatStream(response, (event) => {
+    if (event.type === 'content' && event.delta) onChunk?.(event.delta)
+    else if (event.type === 'error' && event.message) onChunk?.(event.message)
+  })
+}
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const chunk = decoder.decode(value, { stream: true })
-    if (onChunk) onChunk(chunk)
-  }
+export function repairMermaidDiagram(payload) {
+  return request('/api/chat/mermaid/repair', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    timeoutMs: 60_000,
+  })
+}
+
+export function commitMermaidRepair(payload) {
+  return request('/api/chat/mermaid/repair/commit', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    timeoutMs: 20_000,
+  })
 }

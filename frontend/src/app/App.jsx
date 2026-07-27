@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { sendChatMessage, sendWelcomeMessage } from '../api/chat'
 import { sendCode, register, login, selectRole } from '../api/auth'
-import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, fetchMaterialFile, fetchMaterialPreview } from '../api/classes'
+import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, deleteClassMaterial, fetchMaterialFile, fetchMaterialPreview } from '../api/classes'
 import { fetchConversations, fetchConversationMessages, deleteConversation, renameConversation, submitConversationFeedback } from '../api/conversations'
 import {
   fetchClassStudents,
@@ -11,6 +11,7 @@ import {
   generateStudentReport,
   generateMyReport,
   generateClassFeedback,
+  fetchLearningGenerationJob,
   fetchLearningAssistantStatus,
 } from '../api/learning'
 import {
@@ -20,6 +21,7 @@ import {
   submitHomework,
   fetchHomeworkSubmissions,
   downloadHomeworkAttachment,
+  fetchHomeworkAttachmentFile,
   downloadSubmissionFile,
 } from '../api/homework'
 import { getStoredUser, setAuth, clearAuth } from '../api/httpClient'
@@ -32,7 +34,7 @@ import ChatPage from '../pages/ChatPage'
 import ResourcesPage from '../pages/ResourcesPage'
 import HomeworkPage from '../pages/HomeworkPage'
 import { EXAMPLE_PROMPT_GROUPS, SCENE_QUOTES, TRANSLATIONS } from '../config/uiContent'
-import { CODE_COOLDOWN_SEC, TONGJI_EMAIL_RE, getBeijingHour, getMaterialCategory, getRemainingCooldown, getSceneByHour, saveCooldown } from '../utils/appUtils'
+import { CODE_COOLDOWN_SEC, TONGJI_EMAIL_RE, getBeijingHour, getMaterialCategory, getRemainingCooldown, getSceneByHour, saveCooldown, sortMaterials } from '../utils/appUtils'
 
 const SCENE_OPTIONS = [
   { key: 'night', label: { en: 'Starry Night', zh: '星空黑夜' }, angle: 0 },
@@ -112,7 +114,7 @@ function AppController() {
   const [materialUploadNotice, setMaterialUploadNotice] = useState(null)
   const [homeworks, setHomeworks] = useState([])
   const [homeworkForm, setHomeworkForm] = useState({ title: '', description: '', dueAt: '' })
-  const [homeworkFile, setHomeworkFile] = useState(null)
+  const [homeworkFiles, setHomeworkFiles] = useState([])
   const [homeworkBusy, setHomeworkBusy] = useState(false)
   const [expandedHomeworkId, setExpandedHomeworkId] = useState(null)
   const [homeworkSubmissions, setHomeworkSubmissions] = useState({})
@@ -132,6 +134,8 @@ function AppController() {
   const [learningAssistantLoading, setLearningAssistantLoading] = useState(false)
   const [learningAssistantError, setLearningAssistantError] = useState('')
   const [learningDrawer, setLearningDrawer] = useState(null)
+  const [learningGenerationJob, setLearningGenerationJob] = useState(null)
+  const [learningGenerationReady, setLearningGenerationReady] = useState(false)
   const [pendingImage, setPendingImage] = useState(null)
   const imageInputRef = useRef(null)
   const welcomeRequestRef = useRef({ key: null, controller: null })
@@ -140,6 +144,8 @@ function AppController() {
   const loadedConversationIdRef = useRef(null)
   const [language, setLanguage] = useState('zh')
   const [activeFilter, setActiveFilter] = useState('All')
+  const [materialSortBy, setMaterialSortBy] = useState('name')
+  const [materialSortDirection, setMaterialSortDirection] = useState('asc')
   const [exampleGroupIndex, setExampleGroupIndex] = useState(0)
 
   const [dialRotation, setDialRotation] = useState(0)
@@ -154,6 +160,7 @@ function AppController() {
   const materialsRequestRef = useRef(0)
   const activeClassIdRef = useRef(null)
   const uploadNoticeTimerRef = useRef(null)
+  const learningGenerationJobRef = useRef(null)
   const [pendingActions, setPendingActions] = useState({})
 
   const isActionPending = useCallback(
@@ -195,25 +202,27 @@ function AppController() {
       : 'chat'
 
   const welcomeText = useMemo(() => {
-    if (!user) return t.auth.welcomeGuest
+    if (!user) return t.auth.welcomeGuestIntro
     if (user.needs_role_selection) return t.auth.welcomeRolePending
     if (isTeacher && !activeClass) {
       return language === 'zh'
         ? '你好，老师！请先创建或选择一个班级，然后我会围绕当前班级协助你进行教学问答、资料与学生管理。'
         : 'Hello, teacher! Create or select a class first, then I can support teaching Q&A, materials, and student management for that class.'
     }
-    return isTeacher ? t.auth.welcomeTeacher : isStudent ? t.auth.welcomeStudent : t.auth.welcomeGuest
+    return isTeacher ? t.auth.welcomeTeacher : isStudent ? t.auth.welcomeStudent : t.auth.welcomeGuestIntro
   }, [user, isTeacher, isStudent, activeClass, language, t])
 
   const chatPlaceholder = useMemo(() => {
-    if (!user) return t.auth.welcomeGuest
+    if (!user) return t.auth.welcomeGuestPrompt
     if (user.needs_role_selection) return t.auth.welcomeRolePending
     return t.placeholder
   }, [user, t])
   const visibleMaterials = useMemo(() => {
-    if (activeFilter === 'All') return materials
-    return materials.filter(m => getMaterialCategory(m) === activeFilter)
-  }, [materials, activeFilter])
+    const filtered = activeFilter === 'All'
+      ? materials
+      : materials.filter(m => getMaterialCategory(m) === activeFilter)
+    return sortMaterials(filtered, materialSortBy, materialSortDirection, language)
+  }, [materials, activeFilter, materialSortBy, materialSortDirection, language])
 
   const loadClasses = useCallback(async () => {
     if (!user?.role) return
@@ -375,7 +384,21 @@ function AppController() {
     setLearningAssistantLoading(true)
     setLearningAssistantError('')
     try {
-      setLearningAssistantStatus(await fetchLearningAssistantStatus(classId))
+      const data = await fetchLearningAssistantStatus(classId)
+      setLearningAssistantStatus(data)
+      const activeJob = data.generation_job
+        || data.students?.find(student => student.generation_job)?.generation_job
+        || null
+      if (activeJob) {
+        setLearningGenerationJob(activeJob)
+        setGeneratingLearning(true)
+      } else if (
+        !learningGenerationJobRef.current
+        || learningGenerationJobRef.current.class_id !== classId
+        || !['queued', 'running'].includes(learningGenerationJobRef.current.status)
+      ) {
+        setGeneratingLearning(false)
+      }
     } catch (err) {
       console.error(err)
       if (user?.role === 'teacher') {
@@ -507,6 +530,74 @@ function AppController() {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [isSending, activeClassId, user?.role, loadLearningAssistantStatus])
+
+  useEffect(() => {
+    learningGenerationJobRef.current = learningGenerationJob
+  }, [learningGenerationJob])
+
+  useEffect(() => {
+    const isActive = learningGenerationJob
+      && learningGenerationJob.class_id === activeClassId
+      && ['queued', 'running'].includes(learningGenerationJob.status)
+    if (!isActive || !user?.role) return undefined
+
+    let cancelled = false
+    let timer
+    const poll = async () => {
+      try {
+        const job = await fetchLearningGenerationJob(learningGenerationJob.id)
+        if (cancelled) return
+        setLearningGenerationJob(job)
+        if (['queued', 'running'].includes(job.status)) {
+          timer = window.setTimeout(poll, 2_000)
+          return
+        }
+
+        setGeneratingLearning(false)
+        if (job.status === 'completed' && job.result) {
+          setLearningAssistantError('')
+          if (learningAssistantOpen) {
+            setLearningDrawer({
+              type: job.kind === 'class_feedback' ? 'feedback' : 'report',
+              data: job.result,
+            })
+          } else {
+            setLearningGenerationReady(true)
+          }
+          await loadLearningAssistantStatus(activeClassId)
+        } else if (job.status === 'failed') {
+          setLearningAssistantError(
+            job.error_message
+              || (language === 'zh' ? '报告整理失败，请稍后重试。' : 'The report could not be generated. Please try again.'),
+          )
+        }
+      } catch (err) {
+        if (cancelled) return
+        console.error(err)
+        timer = window.setTimeout(poll, 5_000)
+      }
+    }
+
+    timer = window.setTimeout(poll, 2_000)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    activeClassId,
+    language,
+    learningAssistantOpen,
+    learningGenerationJob,
+    loadLearningAssistantStatus,
+    user?.role,
+  ])
+
+  useEffect(() => {
+    setLearningGenerationJob(null)
+    setLearningGenerationReady(false)
+    setGeneratingLearning(false)
+  }, [activeClassId, user?.id])
+
   useEffect(() => {
     if (authModal === 'signup' && authForm.email) {
       setCodeCooldown(getRemainingCooldown(authForm.email))
@@ -636,7 +727,7 @@ function AppController() {
     setMaterialUploadNotice(null)
     setHomeworks([])
     setHomeworkForm({ title: '', description: '', dueAt: '' })
-    setHomeworkFile(null)
+    setHomeworkFiles([])
     setExpandedHomeworkId(null)
     setHomeworkSubmissions({})
     setSubmitDrafts({})
@@ -691,7 +782,10 @@ function AppController() {
   const handleLearningAssistantToggle = () => {
     const nextOpen = !learningAssistantOpen
     setLearningAssistantOpen(nextOpen)
-    if (nextOpen && activeClassId) loadLearningAssistantStatus(activeClassId)
+    if (nextOpen) {
+      setLearningGenerationReady(false)
+      if (activeClassId) loadLearningAssistantStatus(activeClassId)
+    }
   }
 
   const handleAssistantGenerate = async () => {
@@ -700,18 +794,17 @@ function AppController() {
     setGeneratingLearning(true)
     setLearningAssistantError('')
     try {
+      let job
       if (isTeacher) {
-        const feedback = await generateClassFeedback(activeClassId)
-        setLearningDrawer({ type: 'feedback', data: feedback })
+        job = await generateClassFeedback(activeClassId)
       } else {
-        const report = await generateMyReport(activeClassId)
-        setLearningDrawer({ type: 'report', data: report })
+        job = await generateMyReport(activeClassId)
       }
-      await loadLearningAssistantStatus(activeClassId)
+      setLearningGenerationJob(job)
+      setLearningGenerationReady(false)
     } catch (err) {
-      setLearningAssistantError(err.message || (language === 'zh' ? '生成失败，请稍后再试' : 'Generation failed. Please try again.'))
-    } finally {
       setGeneratingLearning(false)
+      setLearningAssistantError(err.message || (language === 'zh' ? '生成失败，请稍后再试' : 'Generation failed. Please try again.'))
     }
     })
   }
@@ -730,13 +823,12 @@ function AppController() {
     setGeneratingLearning(true)
     setLearningAssistantError('')
     try {
-      const report = await generateStudentReport(activeClassId, student.id)
-      setLearningDrawer({ type: 'report', data: report })
-      await loadLearningAssistantStatus(activeClassId)
+      const job = await generateStudentReport(activeClassId, student.id)
+      setLearningGenerationJob(job)
+      setLearningGenerationReady(false)
     } catch (err) {
-      setLearningAssistantError(err.message)
-    } finally {
       setGeneratingLearning(false)
+      setLearningAssistantError(err.message)
     }
     })
   }
@@ -826,7 +918,9 @@ function AppController() {
           type: 'success',
           classId: targetClassId,
           filename: file.name,
-          message: `${file.name} ${t.auth.uploadSuccess}`,
+          message: result.index_reused
+            ? `${file.name} ${t.auth.indexReused}`
+            : `${file.name} ${t.auth.uploadSuccess}`,
         })
         if (uploadNoticeTimerRef.current) clearTimeout(uploadNoticeTimerRef.current)
         uploadNoticeTimerRef.current = setTimeout(() => setMaterialUploadNotice(null), 4000)
@@ -840,6 +934,18 @@ function AppController() {
         })
       } finally {
         e.target.value = ''
+      }
+    })
+  }
+
+  const handleDeleteMaterial = async (material) => {
+    if (!activeClassId || !window.confirm(t.auth.deleteMaterialConfirm)) return
+    return runPendingAction(`material:delete:${material.id}`, async () => {
+      try {
+        await deleteClassMaterial(activeClassId, material.id)
+        setMaterials(current => current.filter(item => item.id !== material.id))
+      } catch (err) {
+        alert(err.message)
       }
     })
   }
@@ -892,10 +998,10 @@ function AppController() {
           title: homeworkForm.title.trim(),
           description: homeworkForm.description,
           dueAt: homeworkForm.dueAt,
-          file: homeworkFile,
+          files: homeworkFiles,
         })
         setHomeworkForm({ title: '', description: '', dueAt: '' })
-        setHomeworkFile(null)
+        setHomeworkFiles([])
         await loadHomeworks(activeClassId)
       } catch (err) {
         alert(err.message)
@@ -959,6 +1065,28 @@ function AppController() {
       try {
         const blob = await downloadHomeworkAttachment(hw.id)
         downloadBlobFile(blob, hw.attachment_name || 'attachment')
+      } catch (err) {
+        alert(err.message)
+      }
+    })
+  }
+
+  const handleOpenHomeworkAttachment = async (homework, attachment, download = false) => {
+    const actionKey = `homework:attachment:${download ? 'download' : 'view'}:${attachment.id}`
+    return runPendingAction(actionKey, async () => {
+      try {
+        const blob = await fetchHomeworkAttachmentFile(
+          homework.id,
+          attachment.id,
+          download,
+        )
+        if (download) {
+          downloadBlobFile(blob, attachment.filename)
+          return
+        }
+        const url = URL.createObjectURL(blob)
+        window.open(url, '_blank', 'noopener,noreferrer')
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
       } catch (err) {
         alert(err.message)
       }
@@ -1114,6 +1242,15 @@ function AppController() {
     }
   }
 
+  const handleAssistantContentUpdate = useCallback((messageId, content) => {
+    if (!messageId || !content) return
+    setMessages(prev => prev.map(message => (
+      message.id === messageId
+        ? { ...message, content }
+        : message
+    )))
+  }, [])
+
   const handleExampleSelect = (prompt) => {
     setInput(prompt)
     requestAnimationFrame(() => {
@@ -1155,30 +1292,55 @@ function AppController() {
     setIsSending(true)
 
     // 创建一个空的助手消息占位
-    const assistantMessage = { role: 'assistant', content: '' }
+    const assistantMessage = {
+      role: 'assistant',
+      content: '',
+      statusStage: 'understanding',
+    }
     setMessages(prev => [...prev, assistantMessage])
 
     try {
-      const newConversationId = await sendChatMessage({
+      const streamResult = await sendChatMessage({
         message: text,
         conversation_id: conversationId,
         class_id: activeClassId,
         ...imagePayload,
-      }, (chunk) => {
+      }, (event) => {
         setMessages(prev => {
           const lastIndex = prev.length - 1
           if (lastIndex >= 0 && prev[lastIndex].role === 'assistant') {
-            // 创建一个全新的数组和全新的消息对象，确保不可变性
             const newMessages = [...prev]
-            newMessages[lastIndex] = {
-              ...newMessages[lastIndex],
-              content: newMessages[lastIndex].content + chunk
+            const current = newMessages[lastIndex]
+            if (event.type === 'content') {
+              newMessages[lastIndex] = {
+                ...current,
+                content: current.content + (event.delta || ''),
+                statusStage: null,
+              }
+            } else if (event.type === 'status' && !current.content) {
+              newMessages[lastIndex] = {
+                ...current,
+                statusStage: event.stage,
+              }
+            } else if (event.type === 'done') {
+              newMessages[lastIndex] = {
+                ...current,
+                id: event.message_id || current.id,
+                statusStage: null,
+              }
+            } else if (event.type === 'error') {
+              newMessages[lastIndex] = {
+                ...current,
+                content: current.content || event.message || '抱歉，发生了错误，请稍后再试。',
+                statusStage: null,
+              }
             }
             return newMessages
           }
           return prev
         })
       })
+      const newConversationId = streamResult.conversationId
       if (newConversationId) {
         setConversationId(newConversationId)
         await loadConversations()
@@ -1244,11 +1406,14 @@ function AppController() {
     expandedHomeworkId,
     generatingLearning,
     handleAddStudent,
+    handleAssistantContentUpdate,
     handleCopyMessage,
     handleCreateClass,
     handleDeleteHomework,
+    handleDeleteMaterial,
     handleDownloadAttachment,
     handleDownloadSubmission,
+    handleOpenHomeworkAttachment,
     handleExampleSelect,
     handleFeedback,
     handleJoinClass,
@@ -1273,7 +1438,7 @@ function AppController() {
     handleToggleSubmissions,
     handleUploadMaterial,
     homeworkBusy,
-    homeworkFile,
+    homeworkFiles,
     homeworkForm,
     homeworks,
     homeworkSubmissions,
@@ -1287,6 +1452,8 @@ function AppController() {
     language,
     materials,
     materialUploadNotice,
+    materialSortBy,
+    materialSortDirection,
     messages,
     messagesListRef,
     messagesEndRef,
@@ -1300,8 +1467,10 @@ function AppController() {
     setAuthForm,
     setAuthModal,
     setClassForm,
-    setHomeworkFile,
+    setHomeworkFiles,
     setHomeworkForm,
+    setMaterialSortBy,
+    setMaterialSortDirection,
     setInput,
     setPendingImage,
     setSidebarOpen,
@@ -1375,13 +1544,18 @@ function AppController() {
           loading={learningAssistantLoading}
           status={learningAssistantStatus}
           generating={generatingLearning}
+          generationReady={learningGenerationReady}
+          generationFailed={learningGenerationJob?.status === 'failed'}
           isActionPending={isActionPending}
           error={learningAssistantError}
           language={language}
           onToggle={handleLearningAssistantToggle}
           onClose={() => setLearningAssistantOpen(false)}
           onGenerate={handleAssistantGenerate}
-          onViewLatest={(data) => setLearningDrawer({ type: isTeacher ? 'feedback' : 'report', data })}
+          onViewLatest={(data) => {
+            setLearningGenerationReady(false)
+            setLearningDrawer({ type: isTeacher ? 'feedback' : 'report', data })
+          }}
           onFocusChat={() => {
             setLearningAssistantOpen(false)
             requestAnimationFrame(() => composerInputRef.current?.focus())
@@ -1394,7 +1568,7 @@ function AppController() {
         />
       )}
 
-      <LearningReportDrawer value={learningDrawer} language={language} onClose={() => setLearningDrawer(null)} />
+      <LearningReportDrawer value={learningDrawer} role={user?.role} language={language} onClose={() => setLearningDrawer(null)} />
 
       <AppModals model={viewModel} />
 

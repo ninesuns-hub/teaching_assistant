@@ -241,6 +241,10 @@
 .learning-primary-action {
   width: 100%;
   min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 10px 15px;
   border: 1px solid rgba(96, 60, 44, 0.08);
   border-radius: 14px;
@@ -266,6 +270,14 @@
   color: #654d52;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.learning-background-note {
+  margin: 12px 0 0;
+  color: #806c62;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: center;
 }
 
 .learning-text-action {

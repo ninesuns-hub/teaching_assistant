@@ -1,6 +1,10 @@
 import os
 import uuid
 import logging
+import json
+import threading
+import time
+from collections import OrderedDict
 from typing import List, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -11,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # ── OpenAI 客户端 (专用 Embedding) ──
 _embed_client = None
+_query_embedding_cache = OrderedDict()
+_query_embedding_cache_lock = threading.Lock()
+_QUERY_CACHE_MAX_SIZE = 512
+_QUERY_CACHE_TTL_SECONDS = 3600
 
 def get_embed_client():
     global _embed_client
@@ -23,6 +31,8 @@ def get_embed_client():
 
 # ── Qdrant 客户端 ──
 _qdrant_client = None
+_payload_index_checked = False
+_collection_ready = False
 
 def get_qdrant_client():
     global _qdrant_client
@@ -44,10 +54,59 @@ def _embed(texts: List[str]) -> List[List[float]]:
         return [data.embedding for data in response.data]
     except Exception as e:
         logger.error(f"Embedding API Error: {e}")
-        # 兜底：返回 1536 维零向量 (text-embedding-3-small)
-        return [[0.0] * 1536 for _ in texts]
+        raise
+
+
+def _embed_query(question: str, request_id: str | None = None) -> List[float]:
+    normalized = " ".join(question.casefold().split())
+    cache_key = (settings.EMBED_MODEL_NAME, normalized)
+    now = time.monotonic()
+    with _query_embedding_cache_lock:
+        cached = _query_embedding_cache.get(cache_key)
+        if cached and now - cached[0] <= _QUERY_CACHE_TTL_SECONDS:
+            _query_embedding_cache.move_to_end(cache_key)
+            logger.info(json.dumps({
+                "event": "chat_timing",
+                "request_id": request_id or "-",
+                "stage": "embedding",
+                "elapsed_ms": 0,
+                "cache_hit": True,
+            }, ensure_ascii=False))
+            return cached[1]
+        if cached:
+            _query_embedding_cache.pop(cache_key, None)
+
+    started_at = time.perf_counter()
+    try:
+        vector = _embed([question])[0]
+    except Exception:
+        logger.info(json.dumps({
+            "event": "chat_timing",
+            "request_id": request_id or "-",
+            "stage": "embedding",
+            "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            "cache_hit": False,
+            "failed": True,
+        }, ensure_ascii=False))
+        raise
+    logger.info(json.dumps({
+        "event": "chat_timing",
+        "request_id": request_id or "-",
+        "stage": "embedding",
+        "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+        "cache_hit": False,
+    }, ensure_ascii=False))
+    with _query_embedding_cache_lock:
+        _query_embedding_cache[cache_key] = (now, vector)
+        _query_embedding_cache.move_to_end(cache_key)
+        while len(_query_embedding_cache) > _QUERY_CACHE_MAX_SIZE:
+            _query_embedding_cache.popitem(last=False)
+    return vector
 
 def init_collection():
+    global _collection_ready, _payload_index_checked
+    if _collection_ready:
+        return
     client = get_qdrant_client()
     collections = client.get_collections().collections
     exists = any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections)
@@ -58,14 +117,33 @@ def init_collection():
             collection_name=settings.QDRANT_COLLECTION_NAME,
             vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE),
         )
+    if not _payload_index_checked:
+        if settings.QDRANT_PATH:
+            # QdrantLocal evaluates payload filters exactly but does not build
+            # payload indexes. The server-mode branch below creates the index.
+            logger.info("QdrantLocal 模式不支持 payload index，保留精确 scope_keys 过滤")
+        else:
+            collection = client.get_collection(settings.QDRANT_COLLECTION_NAME)
+            if "scope_keys" not in (collection.payload_schema or {}):
+                client.create_payload_index(
+                    collection_name=settings.QDRANT_COLLECTION_NAME,
+                    field_name="scope_keys",
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                    wait=True,
+                )
+        _payload_index_checked = True
+    _collection_ready = True
 
 def clear_collection() -> None:
+    global _collection_ready, _payload_index_checked
     client = get_qdrant_client()
     collections = client.get_collections().collections
     exists = any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections)
     if exists:
         logger.info(f"删除 Qdrant 集合: {settings.QDRANT_COLLECTION_NAME}")
         client.delete_collection(collection_name=settings.QDRANT_COLLECTION_NAME)
+    _payload_index_checked = False
+    _collection_ready = False
     init_collection()
 
 def add_documents(chunks: List[Dict[str, Any]]) -> None:
@@ -80,6 +158,9 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
 
     points = []
     for i, chunk in enumerate(chunks):
+        metadata = chunk.get("metadata", {})
+        document_hash = metadata.get("document_hash", "")
+        point_key = f"{document_hash}:{chunk.get('page', '')}:{i}:{chunk['text'][:80]}"
         # 统一元数据格式
         payload = {
             "text": chunk["text"],
@@ -87,11 +168,14 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
             "source_type": chunk["source_type"],
             "chapter": chunk.get("chapter", ""),
             "page": str(chunk.get("page", "")),
-            "metadata": chunk.get("metadata", {}) # 额外元数据
+            "document_hash": document_hash,
+            "scope_keys": metadata.get("scope_keys", []),
+            "sources": metadata.get("sources", []),
+            "metadata": metadata # 额外元数据
         }
 
         points.append(models.PointStruct(
-            id=str(uuid.uuid4()),
+            id=str(uuid.uuid5(uuid.NAMESPACE_URL, point_key)),
             vector=embeddings[i],
             payload=payload
         ))
@@ -102,33 +186,121 @@ def add_documents(chunks: List[Dict[str, Any]]) -> None:
     )
     logger.info(f"成功向 Qdrant 写入 {len(points)} 条数据")
 
-def query(question: str, source_type: str = None, top_k: int = None) -> List[Dict[str, Any]]:
+
+def _document_filter(content_hash: str) -> models.Filter:
+    return models.Filter(
+        must=[
+            models.FieldCondition(
+                key="document_hash",
+                match=models.MatchValue(value=content_hash),
+            )
+        ]
+    )
+
+
+def update_document_access(
+    content_hash: str,
+    scope_keys: list[str],
+    sources: list[dict],
+) -> None:
     client = get_qdrant_client()
-    embeddings = _embed([question])
-    if not embeddings:
+    client.set_payload(
+        collection_name=settings.QDRANT_COLLECTION_NAME,
+        payload={
+            "scope_keys": scope_keys,
+            "sources": sources,
+        },
+        points=models.FilterSelector(filter=_document_filter(content_hash)),
+    )
+
+
+def delete_document(content_hash: str) -> None:
+    client = get_qdrant_client()
+    collections = client.get_collections().collections
+    if not any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections):
+        return
+    client.delete(
+        collection_name=settings.QDRANT_COLLECTION_NAME,
+        points_selector=models.FilterSelector(
+            filter=_document_filter(content_hash),
+        ),
+    )
+
+
+def delete_material_documents(class_id: int, material_id: int) -> None:
+    """按班级资料身份删除向量索引，避免误删其他班级的同名文件。"""
+    client = get_qdrant_client()
+    collections = client.get_collections().collections
+    if not any(c.name == settings.QDRANT_COLLECTION_NAME for c in collections):
+        return
+    client.delete(
+        collection_name=settings.QDRANT_COLLECTION_NAME,
+        points_selector=models.FilterSelector(
+            filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="metadata.class_id",
+                        match=models.MatchValue(value=class_id),
+                    ),
+                    models.FieldCondition(
+                        key="metadata.material_id",
+                        match=models.MatchValue(value=material_id),
+                    ),
+                ]
+            )
+        ),
+    )
+
+def query(
+    question: str,
+    source_type: str = None,
+    top_k: int = None,
+    scope_keys: list[str] | None = None,
+    request_id: str | None = None,
+) -> List[Dict[str, Any]]:
+    init_collection()
+    client = get_qdrant_client()
+    try:
+        query_embedding = _embed_query(question, request_id=request_id)
+    except Exception:
+        logger.warning("查询向量生成失败，将由混合检索降级到 BM25")
         return []
 
     n_results = top_k if top_k is not None else settings.TOP_K
 
     # 构造过滤器
-    query_filter = None
+    must_conditions = []
     if source_type:
-        query_filter = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="source_type",
-                    match=models.MatchValue(value=source_type)
-                )
-            ]
+        must_conditions.append(
+            models.FieldCondition(
+                key="source_type",
+                match=models.MatchValue(value=source_type)
+            )
         )
+    if scope_keys:
+        must_conditions.append(
+            models.FieldCondition(
+                key="scope_keys",
+                match=models.MatchAny(any=scope_keys),
+            )
+        )
+    query_filter = models.Filter(must=must_conditions) if must_conditions else None
 
+    qdrant_started_at = time.perf_counter()
     search_result = client.query_points(
         collection_name=settings.QDRANT_COLLECTION_NAME,
-        query=embeddings[0],
+        query=query_embedding,
         query_filter=query_filter,
         limit=n_results,
         with_payload=True
     )
+    logger.info(json.dumps({
+        "event": "chat_timing",
+        "request_id": request_id or "-",
+        "stage": "qdrant",
+        "elapsed_ms": round((time.perf_counter() - qdrant_started_at) * 1000, 2),
+        "result_count": len(search_result.points),
+    }, ensure_ascii=False))
 
     output = []
     for hit in search_result.points:

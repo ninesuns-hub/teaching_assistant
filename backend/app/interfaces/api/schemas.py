@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ChatRequest(BaseModel):
@@ -17,6 +17,37 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+
+
+class MermaidRepairRequest(BaseModel):
+    conversation_id: str
+    message_id: int
+    source: str = Field(min_length=1, max_length=12000)
+    parse_error: str | None = Field(default=None, max_length=2000)
+
+
+class MermaidRepairResponse(BaseModel):
+    source: str
+
+
+class MermaidRepairCommitRequest(BaseModel):
+    conversation_id: str
+    message_id: int
+    original_source: str = Field(min_length=1, max_length=12000)
+    repaired_source: str = Field(min_length=1, max_length=12000)
+
+    @field_validator("original_source", "repaired_source")
+    @classmethod
+    def reject_nested_fences(cls, value: str):
+        source = value.strip()
+        if "```" in source:
+            raise ValueError("Mermaid 源码不能包含 fenced code block")
+        return source
+
+
+class MermaidRepairCommitResponse(BaseModel):
+    source: str
+    content: str
 
 
 class SendCodeRequest(BaseModel):
@@ -111,6 +142,7 @@ class MaterialResponse(BaseModel):
     file_type: str
     file_size: int
     uploaded_at: str
+    content_hash: str | None = None
 
 
 class ConversationResponse(BaseModel):
@@ -181,6 +213,27 @@ class ClassFeedbackResponse(BaseModel):
     created_at: str
 
 
+class LearningGenerationJobResponse(BaseModel):
+    id: str
+    kind: str
+    status: str
+    class_id: int
+    student_id: int | None = None
+    result_id: int | None = None
+    result: dict | None = None
+    error_message: str | None = None
+    created_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+class HomeworkAttachmentResponse(BaseModel):
+    id: int
+    filename: str
+    file_type: str
+    file_size: int = 0
+
+
 class HomeworkResponse(BaseModel):
     id: int
     class_id: int
@@ -189,6 +242,7 @@ class HomeworkResponse(BaseModel):
     due_at: str | None = None
     attachment_name: str | None = None
     has_attachment: bool = False
+    attachments: list[HomeworkAttachmentResponse] = Field(default_factory=list)
     created_at: str
     submission_count: int = 0
     my_submission: dict | None = None
