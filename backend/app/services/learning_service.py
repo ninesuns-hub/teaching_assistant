@@ -7,12 +7,37 @@ from database import class_repo, conversation_repo, learning_repo
 from database.mysql_db import ClassRoom, User
 from agent_core.skills import generate_student_report, generate_class_feedback
 
+REPORT_INPUT_CHAR_LIMIT = 60_000
+
+
+def _bound_report_messages(messages: list[dict]) -> tuple[list[dict], bool]:
+    """Keep the newest complete messages within the report prompt budget."""
+    selected = []
+    used = 0
+    content_trimmed = False
+    for message in reversed(messages):
+        size = len(message.get("content") or "") + 32
+        if selected and used + size > REPORT_INPUT_CHAR_LIMIT:
+            break
+        if not selected and size > REPORT_INPUT_CHAR_LIMIT:
+            message = {
+                **message,
+                "content": (message.get("content") or "")[-REPORT_INPUT_CHAR_LIMIT:],
+            }
+            size = REPORT_INPUT_CHAR_LIMIT
+            content_trimmed = True
+        selected.append(message)
+        used += size
+    selected.reverse()
+    return selected, content_trimmed or len(selected) < len(messages)
+
 
 def generate_student_report_record(
     db: Session,
     student_id: int,
     class_id: int,
     generated_by: int,
+    commit: bool = True,
 ) -> dict:
     classroom = db.query(ClassRoom).filter(ClassRoom.id == class_id).first()
     if not classroom:
@@ -22,8 +47,21 @@ def generate_student_report_record(
     if not student:
         raise ValueError("学生不存在")
 
-    messages = conversation_repo.get_student_messages_in_class(db, student_id, class_id)
-    result = generate_student_report(student.name, classroom.name, messages)
+    total_message_count = conversation_repo.count_student_messages_in_class(
+        db, student_id, class_id
+    )
+    messages = conversation_repo.get_student_messages_in_class(
+        db, student_id, class_id, limit=500
+    )
+    analyzed_messages, truncated = _bound_report_messages(messages)
+    result = generate_student_report(student.name, classroom.name, analyzed_messages)
+    stats = result.get("stats", {})
+    stats.update({
+        "message_count": total_message_count,
+        "total_message_count": total_message_count,
+        "analyzed_message_count": len(analyzed_messages),
+        "input_truncated": truncated or total_message_count > len(messages),
+    })
 
     report = learning_repo.save_student_report(
         db=db,
@@ -31,8 +69,9 @@ def generate_student_report_record(
         class_id=class_id,
         generated_by=generated_by,
         summary=result["summary"],
-        stats=result.get("stats", {}),
-        message_count=len(messages),
+        stats=stats,
+        message_count=total_message_count,
+        commit=commit,
     )
     return _serialize_report(report, student.name)
 
@@ -41,6 +80,7 @@ def generate_class_feedback_record(
     db: Session,
     class_id: int,
     teacher_id: int,
+    commit: bool = True,
 ) -> dict:
     classroom = db.query(ClassRoom).filter(ClassRoom.id == class_id).first()
     if not classroom:
@@ -60,10 +100,14 @@ def generate_class_feedback_record(
                 "summary_excerpt": reports[0].summary[:1000],
             })
         elif msg_count > 0:
+            messages = conversation_repo.get_student_messages_in_class(
+                db, s["id"], class_id, limit=500
+            )
+            analyzed_messages, _ = _bound_report_messages(messages)
             quick = generate_student_report(
                 s["name"],
                 classroom.name,
-                conversation_repo.get_student_messages_in_class(db, s["id"], class_id),
+                analyzed_messages,
             )
             student_reports.append({
                 "student_name": s["name"],
@@ -78,6 +122,7 @@ def generate_class_feedback_record(
         summary=result["summary"],
         stats=result.get("stats", {}),
         student_count=len(students),
+        commit=commit,
     )
     return _serialize_feedback(feedback)
 

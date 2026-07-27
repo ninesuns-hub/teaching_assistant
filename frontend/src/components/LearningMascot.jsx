@@ -6,10 +6,13 @@ import './LearningMascot.css'
 const copy = {
   zh: {
     teacherTitle: '小离的学情笔记', studentTitle: '小离的学习笔记',
-    loading: '我正在翻看最近的学习记录…',
+    loading: '我正在翻看最近的学习记录...',
+    classLoading: '正在后台整理…',
+    background: '报告会在后台继续整理，你可以先关闭这张学习笔记',
     noClass: '先选一个班级吧。这样我才能分清课程，也不会把不同班级的学习记录混在一起。',
     goClass: '去选择班级', start: '开始和我聊聊', continue: '继续和我聊聊',
     generate: '帮我整理学情报告', update: '把报告更新一下', view: '看看上次的报告',
+    retry: '重新整理一次',
     generateClass: '帮我整理班级学情', updateClass: '更新班级学情', viewClass: '看看上次的班级反馈',
     noData: '我们还没有留下学习记录。以后遇到课程问题，随时来找我。',
     enough: '最近聊到的内容已经比较丰富了，我可以帮你整理成一份学情报告。',
@@ -29,10 +32,13 @@ const copy = {
   },
   en: {
     teacherTitle: "Xiaoli's class notes", studentTitle: "Xiaoli's learning notes",
-    loading: 'Looking through the latest learning records…',
+    loading: 'Organizing in the background…',
+    classLoading: 'Organizing in the background…',
+    background: 'The report will keep running in the background. You can close these notes.',
     noClass: 'Choose a class first so I can keep each course and its learning records separate.',
     goClass: 'Choose a class', start: 'Start a conversation', continue: 'Keep learning with me',
     generate: 'Organize my learning report', update: 'Update my report', view: 'View the last report',
+    retry: 'Try organizing again',
     generateClass: 'Organize class learning', updateClass: 'Update class learning', viewClass: 'View the last class note',
     noData: 'We have not left a learning trail yet. Come talk to me whenever a course question comes up.',
     enough: 'We have discussed enough material for me to organize a learning report.',
@@ -63,9 +69,13 @@ function formatDate(value, language) {
   }).format(new Date(value))
 }
 
-function StudentPanel({ text, status, generating, onGenerate, onViewLatest, onFocusChat }) {
+function StudentPanel({ text, status, generating, hasError, onGenerate, onViewLatest, onFocusChat }) {
   const count = status?.effective_question_count ?? 0
   const latest = status?.latest_report
+  const canCreateOrUpdate = Boolean(
+    status?.can_generate
+    && (!latest || status?.has_updates || hasError || generating),
+  )
   let message = text.noData
   if (count > 0 && !status?.can_generate) message = fill(text.accumulating, { count })
   else if (latest && status?.has_updates) message = text.changed
@@ -78,9 +88,9 @@ function StudentPanel({ text, status, generating, onGenerate, onViewLatest, onFo
         <p>{message}</p>
       </div>
       <div className="learning-assistant-actions">
-        {status?.can_generate ? (
+        {canCreateOrUpdate ? (
           <button className="learning-primary-action" onClick={onGenerate} disabled={generating} aria-busy={generating}>
-            {generating ? text.loading : latest ? text.update : text.generate}
+            {generating ? text.loading : hasError ? text.retry : latest ? text.update : text.generate}
           </button>
         ) : (
           <button className="learning-primary-action" onClick={onFocusChat}>{count ? text.continue : text.start}</button>
@@ -91,7 +101,7 @@ function StudentPanel({ text, status, generating, onGenerate, onViewLatest, onFo
   )
 }
 
-function TeacherPanel({ text, status, generating, isActionPending, onGenerate, onViewLatest, onStudentAction }) {
+function TeacherPanel({ text, status, generating, hasError, isActionPending, onGenerate, onViewLatest, onStudentAction }) {
   const total = status?.student_count ?? 0
   const active = status?.active_students ?? 0
   const ready = status?.ready_students ?? 0
@@ -125,7 +135,7 @@ function TeacherPanel({ text, status, generating, isActionPending, onGenerate, o
       )}
       <div className="learning-assistant-actions">
         <button className="learning-primary-action" onClick={onGenerate} disabled={generating || !active} aria-busy={generating}>
-          {generating ? text.loading : latest ? text.updateClass : text.generateClass}
+          {generating ? text.classLoading : hasError ? text.retry : latest ? text.updateClass : text.generateClass}
         </button>
         {latest && <button className="learning-text-action" onClick={() => onViewLatest(latest)}>{text.viewClass}</button>}
       </div>
@@ -168,12 +178,12 @@ export function LearningReportDrawer({ value, language = 'zh', onClose }) {
   )
 }
 
-export default function LearningMascot({ role, activeClass, open, loading, status, generating, isActionPending, error, language = 'zh', onToggle, onClose, onGenerate, onViewLatest, onFocusChat, onGoToClasses, onStudentAction }) {
+export default function LearningMascot({ role, activeClass, open, loading, status, generating, generationReady = false, generationFailed = false, isActionPending, error, language = 'zh', onToggle, onClose, onGenerate, onViewLatest, onFocusChat, onGoToClasses, onStudentAction }) {
   const text = copy[language] || copy.zh
   const title = role === 'teacher' ? text.teacherTitle : text.studentTitle
-  const showBadge = role === 'student'
+  const showBadge = generationReady || (role === 'student'
     ? Boolean(status?.has_updates || (status?.can_generate && !status?.latest_report))
-    : Boolean(status?.ready_students)
+    : Boolean(status?.ready_students))
 
   useEffect(() => {
     if (!open) return undefined
@@ -192,11 +202,12 @@ export default function LearningMascot({ role, activeClass, open, loading, statu
             <button onClick={onClose} aria-label={text.close}>×</button>
           </div>
           {error && <p className="learning-sync-note"><span />{error}</p>}
+          {generating && <p className="learning-background-note">{text.background}</p>}
           {loading ? <div className="learning-assistant-loading"><i /><i /><i /><span>{text.loading}</span></div>
             : !activeClass ? <><div className="learning-assistant-letter"><p>{text.noClass}</p></div><button className="learning-primary-action" onClick={onGoToClasses}>{text.goClass}</button></>
               : role === 'teacher'
-                ? <TeacherPanel text={text} status={status} generating={generating} isActionPending={isActionPending} onGenerate={onGenerate} onViewLatest={onViewLatest} onStudentAction={onStudentAction} />
-                : <StudentPanel text={text} status={status} generating={generating} onGenerate={onGenerate} onViewLatest={onViewLatest} onFocusChat={onFocusChat} />}
+                ? <TeacherPanel text={text} status={status} generating={generating} hasError={generationFailed} isActionPending={isActionPending} onGenerate={onGenerate} onViewLatest={onViewLatest} onStudentAction={onStudentAction} />
+                : <StudentPanel text={text} status={status} generating={generating} hasError={generationFailed} onGenerate={onGenerate} onViewLatest={onViewLatest} onFocusChat={onFocusChat} />}
         </section>
       )}
       <button className="learning-mascot-button" onClick={onToggle} aria-expanded={open} aria-label={text.mascotLabel}>

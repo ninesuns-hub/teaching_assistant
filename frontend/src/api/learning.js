@@ -31,6 +31,10 @@ export async function generateClassFeedback(classId) {
   return request(`/api/learning/classes/${classId}/feedback`, { method: 'POST' })
 }
 
+export async function fetchLearningGenerationJob(jobId) {
+  return request(`/api/learning/jobs/${jobId}`)
+}
+
 export async function fetchClassFeedback(classId) {
   return request(`/api/learning/classes/${classId}/feedback`)
 }

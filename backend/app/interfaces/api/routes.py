@@ -34,6 +34,7 @@ from app.core.mermaid_service import (
     repair_mermaid_source,
     replace_saved_mermaid_source,
 )
+from app.services.learning_jobs import recover_incomplete_learning_jobs
 from app.core.agent_bindings import build_agent_tools
 from app.core.deps import get_current_user, require_role
 from .auth_routes import router as auth_router
@@ -53,6 +54,7 @@ router.include_router(learning_router, prefix="/learning", tags=["learning"])
 router.include_router(homework_router, prefix="/homework", tags=["homework"])
 
 init_db()
+recover_incomplete_learning_jobs()
 
 _agent_holder: list[ReactAgent | None] = [None]
 agent = ReactAgent(

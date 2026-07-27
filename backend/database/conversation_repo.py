@@ -200,10 +200,11 @@ def get_student_messages_in_class(
     messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.conversation_id.in_(conv_ids))
-        .order_by(ChatMessage.created_at.asc())
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(limit)
         .all()
     )
+    messages.reverse()
     return [
         {
             "role": m.role,

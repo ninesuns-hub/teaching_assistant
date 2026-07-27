@@ -8,7 +8,7 @@ import enum
 import secrets
 import string
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from agent_core.config.settings import settings
 
 SQLALCHEMY_DATABASE_URL = f"mysql+mysqlconnector://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DB}"
@@ -29,6 +29,10 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UserRole(enum.Enum):
@@ -250,6 +254,24 @@ class ClassLearningFeedback(Base):
     student_count = Column(Integer, default=0)
     status = Column(String(20), nullable=False, default="completed")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LearningGenerationJob(Base):
+    __tablename__ = "learning_generation_jobs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    kind = Column(String(30), nullable=False, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    requested_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="queued", index=True)
+    dedupe_key = Column(String(100), nullable=True, unique=True)
+    result_id = Column(Integer, nullable=True)
+    error_message = Column(String(300), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 def generate_invite_code(length: int = 6) -> str:

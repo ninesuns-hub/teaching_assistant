@@ -11,6 +11,7 @@ import {
   generateStudentReport,
   generateMyReport,
   generateClassFeedback,
+  fetchLearningGenerationJob,
   fetchLearningAssistantStatus,
 } from '../api/learning'
 import {
@@ -133,6 +134,8 @@ function AppController() {
   const [learningAssistantLoading, setLearningAssistantLoading] = useState(false)
   const [learningAssistantError, setLearningAssistantError] = useState('')
   const [learningDrawer, setLearningDrawer] = useState(null)
+  const [learningGenerationJob, setLearningGenerationJob] = useState(null)
+  const [learningGenerationReady, setLearningGenerationReady] = useState(false)
   const [pendingImage, setPendingImage] = useState(null)
   const imageInputRef = useRef(null)
   const welcomeRequestRef = useRef({ key: null, controller: null })
@@ -157,6 +160,7 @@ function AppController() {
   const materialsRequestRef = useRef(0)
   const activeClassIdRef = useRef(null)
   const uploadNoticeTimerRef = useRef(null)
+  const learningGenerationJobRef = useRef(null)
   const [pendingActions, setPendingActions] = useState({})
 
   const isActionPending = useCallback(
@@ -380,7 +384,21 @@ function AppController() {
     setLearningAssistantLoading(true)
     setLearningAssistantError('')
     try {
-      setLearningAssistantStatus(await fetchLearningAssistantStatus(classId))
+      const data = await fetchLearningAssistantStatus(classId)
+      setLearningAssistantStatus(data)
+      const activeJob = data.generation_job
+        || data.students?.find(student => student.generation_job)?.generation_job
+        || null
+      if (activeJob) {
+        setLearningGenerationJob(activeJob)
+        setGeneratingLearning(true)
+      } else if (
+        !learningGenerationJobRef.current
+        || learningGenerationJobRef.current.class_id !== classId
+        || !['queued', 'running'].includes(learningGenerationJobRef.current.status)
+      ) {
+        setGeneratingLearning(false)
+      }
     } catch (err) {
       console.error(err)
       if (user?.role === 'teacher') {
@@ -512,6 +530,74 @@ function AppController() {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [isSending, activeClassId, user?.role, loadLearningAssistantStatus])
+
+  useEffect(() => {
+    learningGenerationJobRef.current = learningGenerationJob
+  }, [learningGenerationJob])
+
+  useEffect(() => {
+    const isActive = learningGenerationJob
+      && learningGenerationJob.class_id === activeClassId
+      && ['queued', 'running'].includes(learningGenerationJob.status)
+    if (!isActive || !user?.role) return undefined
+
+    let cancelled = false
+    let timer
+    const poll = async () => {
+      try {
+        const job = await fetchLearningGenerationJob(learningGenerationJob.id)
+        if (cancelled) return
+        setLearningGenerationJob(job)
+        if (['queued', 'running'].includes(job.status)) {
+          timer = window.setTimeout(poll, 2_000)
+          return
+        }
+
+        setGeneratingLearning(false)
+        if (job.status === 'completed' && job.result) {
+          setLearningAssistantError('')
+          if (learningAssistantOpen) {
+            setLearningDrawer({
+              type: job.kind === 'class_feedback' ? 'feedback' : 'report',
+              data: job.result,
+            })
+          } else {
+            setLearningGenerationReady(true)
+          }
+          await loadLearningAssistantStatus(activeClassId)
+        } else if (job.status === 'failed') {
+          setLearningAssistantError(
+            job.error_message
+              || (language === 'zh' ? '报告整理失败，请稍后重试。' : 'The report could not be generated. Please try again.'),
+          )
+        }
+      } catch (err) {
+        if (cancelled) return
+        console.error(err)
+        timer = window.setTimeout(poll, 5_000)
+      }
+    }
+
+    timer = window.setTimeout(poll, 2_000)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    activeClassId,
+    language,
+    learningAssistantOpen,
+    learningGenerationJob,
+    loadLearningAssistantStatus,
+    user?.role,
+  ])
+
+  useEffect(() => {
+    setLearningGenerationJob(null)
+    setLearningGenerationReady(false)
+    setGeneratingLearning(false)
+  }, [activeClassId, user?.id])
+
   useEffect(() => {
     if (authModal === 'signup' && authForm.email) {
       setCodeCooldown(getRemainingCooldown(authForm.email))
@@ -696,7 +782,10 @@ function AppController() {
   const handleLearningAssistantToggle = () => {
     const nextOpen = !learningAssistantOpen
     setLearningAssistantOpen(nextOpen)
-    if (nextOpen && activeClassId) loadLearningAssistantStatus(activeClassId)
+    if (nextOpen) {
+      setLearningGenerationReady(false)
+      if (activeClassId) loadLearningAssistantStatus(activeClassId)
+    }
   }
 
   const handleAssistantGenerate = async () => {
@@ -705,18 +794,17 @@ function AppController() {
     setGeneratingLearning(true)
     setLearningAssistantError('')
     try {
+      let job
       if (isTeacher) {
-        const feedback = await generateClassFeedback(activeClassId)
-        setLearningDrawer({ type: 'feedback', data: feedback })
+        job = await generateClassFeedback(activeClassId)
       } else {
-        const report = await generateMyReport(activeClassId)
-        setLearningDrawer({ type: 'report', data: report })
+        job = await generateMyReport(activeClassId)
       }
-      await loadLearningAssistantStatus(activeClassId)
+      setLearningGenerationJob(job)
+      setLearningGenerationReady(false)
     } catch (err) {
-      setLearningAssistantError(err.message || (language === 'zh' ? '生成失败，请稍后再试' : 'Generation failed. Please try again.'))
-    } finally {
       setGeneratingLearning(false)
+      setLearningAssistantError(err.message || (language === 'zh' ? '生成失败，请稍后再试' : 'Generation failed. Please try again.'))
     }
     })
   }
@@ -735,13 +823,12 @@ function AppController() {
     setGeneratingLearning(true)
     setLearningAssistantError('')
     try {
-      const report = await generateStudentReport(activeClassId, student.id)
-      setLearningDrawer({ type: 'report', data: report })
-      await loadLearningAssistantStatus(activeClassId)
+      const job = await generateStudentReport(activeClassId, student.id)
+      setLearningGenerationJob(job)
+      setLearningGenerationReady(false)
     } catch (err) {
-      setLearningAssistantError(err.message)
-    } finally {
       setGeneratingLearning(false)
+      setLearningAssistantError(err.message)
     }
     })
   }
@@ -1457,13 +1544,18 @@ function AppController() {
           loading={learningAssistantLoading}
           status={learningAssistantStatus}
           generating={generatingLearning}
+          generationReady={learningGenerationReady}
+          generationFailed={learningGenerationJob?.status === 'failed'}
           isActionPending={isActionPending}
           error={learningAssistantError}
           language={language}
           onToggle={handleLearningAssistantToggle}
           onClose={() => setLearningAssistantOpen(false)}
           onGenerate={handleAssistantGenerate}
-          onViewLatest={(data) => setLearningDrawer({ type: isTeacher ? 'feedback' : 'report', data })}
+          onViewLatest={(data) => {
+            setLearningGenerationReady(false)
+            setLearningDrawer({ type: isTeacher ? 'feedback' : 'report', data })
+          }}
           onFocusChat={() => {
             setLearningAssistantOpen(false)
             requestAnimationFrame(() => composerInputRef.current?.focus())

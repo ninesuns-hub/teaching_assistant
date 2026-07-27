@@ -213,6 +213,20 @@ class ClassFeedbackResponse(BaseModel):
     created_at: str
 
 
+class LearningGenerationJobResponse(BaseModel):
+    id: str
+    kind: str
+    status: str
+    class_id: int
+    student_id: int | None = None
+    result_id: int | None = None
+    result: dict | None = None
+    error_message: str | None = None
+    created_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
 class HomeworkAttachmentResponse(BaseModel):
     id: int
     filename: str
