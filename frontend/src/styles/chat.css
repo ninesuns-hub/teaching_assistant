@@ -380,9 +380,9 @@
 }
 
 .markdown-message blockquote {
-  border-left: 3px solid rgba(255, 255, 255, 0.28);
+  border-left: 3px solid var(--color-border-strong);
   padding-left: 12px;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--color-text-primary);
 }
 
 .markdown-message code {

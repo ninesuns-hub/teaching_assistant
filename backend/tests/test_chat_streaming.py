@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from agent_core.react_agent import AnswerStreamExtractor, ReactAgent
-from agent_core.latency_policy import decide_latency_path
 from agent_core.tools.base import Tool
 from agent_core.visualization import decide_visualization
 from app.core.mermaid_service import (
@@ -108,49 +107,6 @@ class AnswerStreamExtractorTests(unittest.TestCase):
         first_content = next(events)
         self.assertEqual(first_content, {"type": "content", "delta": "第一个片段"})
         self.assertFalse(state["upstream_resumed"])
-
-    def test_clear_knowledge_question_uses_direct_terminal_answer(self):
-        config = SimpleNamespace(
-            CHAT_API_KEY="test",
-            CHAT_BASE_URL="https://example.invalid",
-            CHAT_MODEL_NAME="test-model",
-            MAX_TOKENS=256,
-            SYSTEM_PROMPT="system",
-            CHAT_FAST_PATH_ENABLED=True,
-            CHAT_ADAPTIVE_THINKING_ENABLED=True,
-        )
-        calls = []
-        tool = Tool(
-            name="query_lecture_knowledge",
-            func=lambda value: calls.append(value) or "来源：chapter.pdf，第 2 页",
-            description="knowledge",
-        )
-        agent = ReactAgent(config, [tool])
-        agent._call_direct_llm_stream = lambda _prompt: iter(["集合是对象的汇集。"])
-        agent._call_llm_stream = lambda _prompt: self.fail(
-            "clear single-tool question must not enter ReAct"
-        )
-
-        events = list(agent.stream_events(
-            "什么是集合？",
-            request_context={"request_id": "fast-knowledge", "class_id": 1},
-        ))
-        content = "".join(
-            event.get("delta", "")
-            for event in events
-            if event["type"] == "content"
-        )
-
-        self.assertEqual(calls, ["什么是集合？"])
-        self.assertEqual(content, "集合是对象的汇集。")
-        self.assertEqual(agent.request_context["latency_route"], "clear_course_knowledge")
-        self.assertFalse(agent.request_context["thinking_enabled"])
-
-    def test_complex_proof_keeps_react_and_thinking(self):
-        decision = decide_latency_path("请证明每棵树至少有两个叶节点")
-        self.assertIsNone(decision.fast_action)
-        self.assertTrue(decision.thinking_enabled)
-        self.assertEqual(decision.reason, "complex_reasoning")
 
 
 class ProactiveVisualizationTests(unittest.TestCase):
@@ -284,31 +240,9 @@ class ProactiveVisualizationTests(unittest.TestCase):
         self.assertEqual(suspicious["suspicious_text"], 1)
 
 
-class WelcomeContentTests(unittest.TestCase):
-    def test_welcome_is_immediate_role_aware_content(self):
-        from app.interfaces.api.routes import _build_welcome_content
-        from database.mysql_db import UserRole
-
-        student = _build_welcome_content(
-            SimpleNamespace(role=UserRole.STUDENT),
-            "离散数学一班",
-            "zh",
-        )
-        teacher = _build_welcome_content(
-            SimpleNamespace(role=UserRole.TEACHER),
-            "离散数学一班",
-            "zh",
-        )
-
-        self.assertIn("小离", student)
-        self.assertIn("离散数学一班", student)
-        self.assertIn("课程资料", teacher)
-        self.assertNotIn("<answer>", student + teacher)
-
-
 class MermaidRepairServiceTests(unittest.TestCase):
-    @patch("app.core.mermaid_service.get_chat_client")
-    def test_extracts_repaired_mermaid_fence(self, client_mock):
+    @patch("app.core.mermaid_service.OpenAI")
+    def test_extracts_repaired_mermaid_fence(self, openai_mock):
         response = SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -322,7 +256,7 @@ class MermaidRepairServiceTests(unittest.TestCase):
                 )
             ]
         )
-        client_mock.return_value.chat.completions.create.return_value = response
+        openai_mock.return_value.chat.completions.create.return_value = response
         repaired = repair_mermaid_source(
             "graph LR\nsubgraph 标题:a->b\nA-->B\nend",
             "parse error",

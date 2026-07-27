@@ -79,64 +79,42 @@ def _build_agent_input(message: str, image_path: Optional[str]) -> str:
     return text
 
 
-def _build_welcome_content(
-    current_user: User,
-    class_name: Optional[str] = None,
-    language: str = "zh",
-) -> str:
-    if language.lower().startswith("en"):
-        if current_user.role == UserRole.TEACHER:
-            class_context = (
-                f" I’m ready to support **{class_name}**."
-                if class_name else ""
-            )
-            return (
-                "Hello, teacher! I’m **Xiao Li**, your discrete mathematics "
-                f"teaching assistant.{class_context}\n\n"
-                "I can help you organize course materials and classes, publish "
-                "and review assignments, understand student learning, and answer "
-                "common discrete mathematics questions. I’ll keep information "
-                "grounded in the selected class and its available materials.\n\n"
-                "Choose a class or open a conversation whenever you’re ready."
-            )
-        class_context = (
-            f" We’ll use **{class_name}** as the current course context."
-            if class_name else ""
-        )
-        return (
-            "Hello! I’m **Xiao Li**, your discrete mathematics teaching "
-            f"assistant 😊{class_context}\n\n"
-            "I can explain concepts with clear examples, search course materials, "
-            "format mathematics carefully, draw useful diagrams, analyze uploaded "
-            "questions, and look up course information.\n\n"
-            "Ask me anything about discrete mathematics when you’re ready!"
-        )
-
+def _build_welcome_input(current_user: User, class_name: Optional[str] = None) -> str:
     if current_user.role == UserRole.TEACHER:
-        class_part = (
-            f"当前我会以 **{class_name}** 作为班级上下文。"
-            if class_name else "选择班级后，我会结合对应班级的数据协助你。"
-        )
+        class_part = f"当前教师正在管理的班级是“{class_name}”。" if class_name else "当前教师还没有选定班级。"
         return (
-            "你好，老师！我是离散数学课程智能助教 **小离**。"
-            f"{class_part}\n\n"
-            "我可以协助管理课程资料和班级学生、布置并查看作业、整理学情反馈，"
-            "也能结合课程资料辅助回答学生常见问题。所有查询和分析都会遵循当前班级"
-            "的资料范围，不会虚构尚不存在的数据。\n\n"
-            "选择班级或打开一段对话，我们就可以开始了。"
+            "请你以离散数学课程智能助教“小离”的身份，向已经登录的教师做一段自然、完整的自我介绍。"
+            f"{class_part}"
+            "介绍中要说明你可以帮助教师进行课程资料管理、班级学生管理、作业与提交查看、学情分析，以及辅助回答学生常见问题，不用全部涉及。"
+            "语气要专业、温和、简洁但不要敷衍，长度控制在 2 到 4 个自然段，开头和结尾保持简洁清晰简单引入、收束即可，不要过于冗长。"
+            "分点阐述但不超过5点，介绍过程中不要重复，可以加上类似“😊”这样的表情但不要太多（一两个即可）。"
+            "不要提到这是系统触发的介绍，不要说你没有权限，也不要虚构还不存在的数据。"
         )
 
-    class_part = (
-        f"当前我会结合 **{class_name}** 的课程资料帮助你。"
-        if class_name else "加入或选择班级后，我还可以结合对应课程资料回答。"
-    )
+    class_part = f"你当前服务的课程班级是“{class_name}”。" if class_name else "当前学生已经登录，但还没有明确课程班级上下文。"
     return (
-        "你好！我是 **小离**，你的离散数学课程智能助教 😊"
-        f"{class_part}\n\n"
-        "我可以结合课件或通用知识解释集合、逻辑、图论、关系和组合数学等内容，"
-        "用清晰的公式、例子和必要的图示帮助理解；你也可以上传题目图片，"
-        "或询问老师、评分和课程安排等信息。\n\n"
-        "有任何离散数学问题，随时来问我吧！"
+        "请你以离散数学课程智能助教“小离”的身份，向已经登录的学生做一段自我介绍。"
+        f"{class_part}"
+        "介绍中要说明你可以实现的功能，必要时可以分点阐述，不超过5个能力点，介绍能力时不要出现类似于“📚”的小图标。"
+        "禁止展示 Markdown、LaTeX、Mermaid 的具体语法、定界符或代码示例，只允许自然语言描述排版能力。"
+        "语气要像课程助教一样亲切、可靠、有一点鼓励感，内容清晰不要冗长，长度控制在2 到 4 个自然段。"
+        "在介绍开头和结尾段可以出现类似于“😊”这样的表情，但不要一样。"
+        "不要提到这是系统触发的介绍，不要要求用户重新登录。"
+        "可以参考下面示例的结构与语言，但不要照搬示例内容：\n"
+        "【参考示例】\n"
+        "你好！我是**小离**，你的离散数学课程智能助教 😊\n\n"
+        "我的职责包括：\n\n"
+        "- 耐心解答你关于离散数学的各种问题"
+        "（集合论、逻辑、图论、代数结构、组合数学等）。\n"
+        "- 基于课程课件或通用知识，用简洁、清晰的方式解释概念，"
+        "先给结论再举例。\n"
+        "- 支持 Markdown 排版、LaTeX 数学公式、Mermaid 图形"
+        "（如 Hasse 图、树、图等）。\n"
+        "- 如果你上传图片，我也会尽量读取并帮助分析。\n"
+        "- 如果有课程行政问题（老师、评分、课表等），"
+        "我也可以查询相关信息。\n"
+        "- 如果问题与离散数学无关，我会礼貌地引导回课程话题。\n\n"
+        "有任何离散数学的问题，尽管问我吧！\n\n"
     )
 
 
@@ -162,8 +140,14 @@ def _log_chat_timing(request_id: str, stage: str, started_at: float, **fields) -
     )
 
 
-def _stream_welcome(content: str):
-    yield _sse("content", {"delta": content})
+def _stream_welcome(agent_input: str, request_context: dict):
+    for event in agent.stream_events(agent_input, request_context=request_context):
+        if event["type"] == "content":
+            yield _sse("content", {"delta": event.get("delta", "")})
+        elif event["type"] == "status":
+            yield _sse("status", {"stage": event.get("stage", "understanding")})
+        elif event["type"] == "error":
+            yield _sse("error", {"message": event.get("message", "生成介绍失败")})
     yield _sse("done", {})
 
 
@@ -322,7 +306,6 @@ def chat(
 @router.post("/chat/welcome")
 def chat_welcome(
     class_id: Optional[int] = None,
-    language: str = "zh",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -347,10 +330,17 @@ def chat_welcome(
                 class_name = item["name"]
                 break
 
-    content = _build_welcome_content(current_user, class_name, language)
+    request_context = {
+        "welcome": True,
+        "user_id": current_user.id,
+        "user_role": current_user.role.value,
+        "class_id": resolved_class_id,
+        "request_id": str(uuid.uuid4()),
+    }
+    agent_input = _build_welcome_input(current_user, class_name)
 
     return StreamingResponse(
-        _stream_welcome(content),
+        _stream_welcome(agent_input, request_context),
         media_type="text/event-stream",
         headers={
             "X-Chat-Stream-Protocol": "sse-v1",

@@ -489,7 +489,7 @@ function AppController() {
     setWelcomeContent('')
     setWelcomeLoading(true)
 
-    sendWelcomeMessage(activeClassId, language, (chunk) => {
+    sendWelcomeMessage(activeClassId, (chunk) => {
       if (controller.signal.aborted) return
       accumulatedContent += chunk
       setWelcomeContent(accumulatedContent)
