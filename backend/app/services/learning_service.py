@@ -50,17 +50,44 @@ def generate_student_report_record(
     total_message_count = conversation_repo.count_student_messages_in_class(
         db, student_id, class_id
     )
+    previous_reports = learning_repo.list_student_reports(
+        db,
+        student_id,
+        class_id,
+        limit=1,
+    )
+    previous_report = previous_reports[0] if previous_reports else None
+    incremental_count = (
+        max(total_message_count - previous_report.message_count, 0)
+        if previous_report else total_message_count
+    )
     messages = conversation_repo.get_student_messages_in_class(
-        db, student_id, class_id, limit=500
+        db,
+        student_id,
+        class_id,
+        limit=min(500, max(incremental_count, 1)),
     )
     analyzed_messages, truncated = _bound_report_messages(messages)
-    result = generate_student_report(student.name, classroom.name, analyzed_messages)
+    result = generate_student_report(
+        student.name,
+        classroom.name,
+        analyzed_messages,
+        previous_summary=previous_report.summary if previous_report else None,
+    )
     stats = result.get("stats", {})
     stats.update({
         "message_count": total_message_count,
         "total_message_count": total_message_count,
         "analyzed_message_count": len(analyzed_messages),
-        "input_truncated": truncated or total_message_count > len(messages),
+        "incremental_update": bool(previous_report),
+        "previous_report_id": previous_report.id if previous_report else None,
+        "input_truncated": (
+            truncated
+            or (
+                not previous_report
+                and total_message_count > len(messages)
+            )
+        ),
     })
 
     report = learning_repo.save_student_report(
@@ -101,17 +128,19 @@ def generate_class_feedback_record(
             })
         elif msg_count > 0:
             messages = conversation_repo.get_student_messages_in_class(
-                db, s["id"], class_id, limit=500
+                db, s["id"], class_id, limit=12
             )
-            analyzed_messages, _ = _bound_report_messages(messages)
-            quick = generate_student_report(
-                s["name"],
-                classroom.name,
-                analyzed_messages,
+            dialogue_excerpt = "\n".join(
+                f"{'学生' if message['role'] == 'user' else '助教'}："
+                f"{(message.get('content') or '')[:500]}"
+                for message in messages
             )
             student_reports.append({
                 "student_name": s["name"],
-                "summary_excerpt": quick["summary"][:1000],
+                "summary_excerpt": (
+                    "该生尚未生成个人报告，以下为最近对话摘录：\n"
+                    f"{dialogue_excerpt[:3000]}"
+                ),
             })
 
     result = generate_class_feedback(classroom.name, student_reports, message_stats)

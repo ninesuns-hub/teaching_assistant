@@ -1,8 +1,7 @@
 import re
 
-from openai import OpenAI
-
 from agent_core.config.settings import settings
+from agent_core.llm_runtime import get_chat_client, thinking_extra_body
 
 
 _MERMAID_FENCE = re.compile(
@@ -68,11 +67,7 @@ def replace_saved_mermaid_source(
 
 def repair_mermaid_source(source: str, parse_error: str | None = None) -> str:
     """Ask the configured chat model to repair one Mermaid diagram."""
-    client = OpenAI(
-        api_key=settings.CHAT_API_KEY,
-        base_url=settings.CHAT_BASE_URL,
-        timeout=45.0,
-    )
+    client = get_chat_client()
     prompt = (
         "你是 Mermaid 语法修复器。只修复下面这一张图，不回答图中问题，"
         "不增加解释文字。保持原有节点、边和数学含义。\n"
@@ -93,6 +88,7 @@ def repair_mermaid_source(source: str, parse_error: str | None = None) -> str:
         model=settings.CHAT_MODEL_NAME,
         temperature=0,
         max_tokens=min(settings.MAX_TOKENS, 2048),
+        extra_body=thinking_extra_body(False),
         messages=[
             {
                 "role": "system",

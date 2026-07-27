@@ -83,10 +83,13 @@ export async function sendChatMessage(payload, onEvent) {
   }
 }
 
-export async function sendWelcomeMessage(classId, onChunk, signal) {
+export async function sendWelcomeMessage(classId, language, onChunk, signal) {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
   const token = getToken()
-  const query = classId ? `?class_id=${classId}` : ''
+  const params = new URLSearchParams()
+  if (classId) params.set('class_id', classId)
+  if (language) params.set('language', language)
+  const query = params.size ? `?${params.toString()}` : ''
   const response = await fetch(`${API_BASE_URL}/api/chat/welcome${query}`, {
     method: 'POST',
     signal,

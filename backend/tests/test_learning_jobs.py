@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, Mock, patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from app.services.learning_service import (
     REPORT_INPUT_CHAR_LIMIT,
     _bound_report_messages,
+    generate_student_report_record,
 )
 from app.services import learning_jobs
 from database import learning_repo
@@ -42,6 +43,83 @@ class ReportInputTests(unittest.TestCase):
         self.assertEqual(len(selected), 1)
         self.assertTrue(selected[0]["content"].endswith("LATEST"))
         self.assertEqual(len(selected[0]["content"]), REPORT_INPUT_CHAR_LIMIT)
+
+    def test_report_update_only_analyzes_messages_after_previous_report(self):
+        from app.services import learning_service
+
+        class Query:
+            def __init__(self, value):
+                self.value = value
+
+            def filter(self, *_args):
+                return self
+
+            def first(self):
+                return self.value
+
+        previous = SimpleNamespace(
+            id=8,
+            message_count=10,
+            summary="上一版完整报告",
+        )
+        saved = SimpleNamespace(
+            id=9,
+            student_id=2,
+            class_id=3,
+            summary="更新后的完整报告",
+            stats_json="{}",
+            message_count=14,
+            created_at=None,
+        )
+        db = SimpleNamespace()
+        db.query = Mock(side_effect=[
+            Query(SimpleNamespace(id=3, name="一班")),
+            Query(SimpleNamespace(id=2, name="小明")),
+        ])
+        new_messages = [
+            {"role": "user", "content": "新问题一"},
+            {"role": "assistant", "content": "新回答一"},
+            {"role": "user", "content": "新问题二"},
+            {"role": "assistant", "content": "新回答二"},
+        ]
+
+        with (
+            patch.object(
+                learning_service.conversation_repo,
+                "count_student_messages_in_class",
+                return_value=14,
+            ),
+            patch.object(
+                learning_service.conversation_repo,
+                "get_student_messages_in_class",
+                return_value=new_messages,
+            ) as get_messages,
+            patch.object(
+                learning_service.learning_repo,
+                "list_student_reports",
+                return_value=[previous],
+            ),
+            patch.object(
+                learning_service,
+                "generate_student_report",
+                return_value={"summary": saved.summary, "stats": {}},
+            ) as generate,
+            patch.object(
+                learning_service.learning_repo,
+                "save_student_report",
+                return_value=saved,
+            ),
+        ):
+            result = generate_student_report_record(db, 2, 3, 2)
+
+        get_messages.assert_called_once_with(db, 2, 3, limit=4)
+        generate.assert_called_once_with(
+            "小明",
+            "一班",
+            new_messages,
+            previous_summary="上一版完整报告",
+        )
+        self.assertEqual(result["id"], 9)
 
 
 class LearningJobWorkerTests(unittest.TestCase):
