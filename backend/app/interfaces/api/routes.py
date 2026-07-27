@@ -48,6 +48,7 @@ from .conversation_routes import router as conversation_router
 from .learning_routes import router as learning_router
 from .homework_routes import router as homework_router
 from .memory_routes import router as memory_router
+from .health_routes import router as health_router
 
 hybrid_searcher = data_manager.searcher
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ router.include_router(conversation_router, prefix="/conversations", tags=["conve
 router.include_router(learning_router, prefix="/learning", tags=["learning"])
 router.include_router(homework_router, prefix="/homework", tags=["homework"])
 router.include_router(memory_router, tags=["memory"])
+router.include_router(health_router, tags=["health"])
 
 init_db()
 recover_incomplete_learning_jobs()

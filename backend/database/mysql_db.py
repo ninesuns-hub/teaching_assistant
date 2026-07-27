@@ -1,7 +1,8 @@
 import logging
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Enum, ForeignKey, BigInteger, UniqueConstraint, Boolean, Float
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Enum, ForeignKey, BigInteger, UniqueConstraint, Boolean, Float, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.engine import URL
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import enum
@@ -11,7 +12,14 @@ import uuid
 from datetime import datetime, timezone
 from agent_core.config.settings import settings
 
-SQLALCHEMY_DATABASE_URL = f"mysql+mysqlconnector://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DB}"
+SQLALCHEMY_DATABASE_URL = URL.create(
+    "mysql+mysqlconnector",
+    username=settings.MYSQL_USER,
+    password=settings.MYSQL_PASSWORD,
+    host=settings.MYSQL_HOST,
+    port=settings.MYSQL_PORT,
+    database=settings.MYSQL_DB,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -379,35 +387,16 @@ def generate_invite_code(length: int = 6) -> str:
 
 def init_mysql():
     try:
-        import mysql.connector
-        conn = mysql.connector.connect(
-            host=settings.MYSQL_HOST,
-            port=settings.MYSQL_PORT,
-            user=settings.MYSQL_USER,
-            password=settings.MYSQL_PASSWORD,
-            connection_timeout=5,
-            read_timeout=10,
-            write_timeout=10,
-        )
-        cursor = conn.cursor()
-        cursor.execute(
-            f"CREATE DATABASE IF NOT EXISTS {settings.MYSQL_DB} "
-            "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-        )
-        conn.close()
-    except Exception as e:
-        print(f"Error creating database: {e}")
-
-    try:
-        Base.metadata.create_all(bind=engine)
-        _migrate_schema()
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
     except SQLAlchemyError as exc:
         # Database availability must not prevent the API process from starting.
         # Requests will receive a controlled 503 until MySQL recovers.
         logger.error("数据库初始化暂不可用: %s", exc)
 
 
-def _migrate_schema():
+def _legacy_migrate_schema():
+    # Historical reference only. Runtime schema changes are managed by Alembic.
     """兼容已有数据库的简单迁移"""
     from sqlalchemy import text
     with engine.connect() as conn:
