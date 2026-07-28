@@ -20,7 +20,12 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("updated_at", sa.DateTime(), nullable=True))
     op.add_column("users", sa.Column("last_login_at", sa.DateTime(), nullable=True))
     op.execute(sa.text("UPDATE users SET updated_at = COALESCE(created_at, UTC_TIMESTAMP()) WHERE updated_at IS NULL"))
-    op.alter_column("users", "updated_at", nullable=False)
+    op.alter_column(
+        "users",
+        "updated_at",
+        existing_type=sa.DateTime(),
+        nullable=False,
+    )
     op.create_index("ix_users_status", "users", ["status"])
     op.create_table(
         "admin_audit_logs",
