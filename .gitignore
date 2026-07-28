@@ -29,3 +29,5 @@ backend/storage/raw/courses/*
 backend/agent_core/config/.env
 backend/.venv
 tmp/
+*.sql
+*.tar.gz

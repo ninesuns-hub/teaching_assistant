@@ -17,6 +17,16 @@ config.set_main_option(
 target_metadata = Base.metadata
 
 
+def include_object(object_, name, type_, reflected, compare_to):
+    # Imported teaching databases can contain legacy tables, columns and
+    # indexes that are retained for rollback/audit purposes. Alembic manages
+    # the current ORM schema without proposing destructive removal of those
+    # extra reflected objects.
+    if reflected and compare_to is None:
+        return False
+    return True
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
@@ -24,6 +34,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -40,6 +51,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=include_object,
         )
         with context.begin_transaction():
             context.run_migrations()
