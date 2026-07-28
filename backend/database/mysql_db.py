@@ -64,10 +64,27 @@ class User(Base):
         ),
         nullable=True,
     )
+    is_admin = Column(Boolean, nullable=False, default=False)
+    status = Column(String(20), nullable=False, default="active", index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    last_login_at = Column(DateTime, nullable=True)
 
     taught_classes = relationship("ClassRoom", back_populates="teacher")
     memberships = relationship("ClassMember", back_populates="student")
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    action = Column(String(60), nullable=False, index=True)
+    before_json = Column(Text, nullable=True)
+    after_json = Column(Text, nullable=True)
+    reason = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)
 
 
 class CourseInfo(Base):
