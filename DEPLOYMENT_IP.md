@@ -43,10 +43,10 @@ git submodule status
 ```powershell
 git switch main
 git pull origin main
-git merge --no-ff ip-deployment-prep
+git merge --no-ff embedding-4096-deployment
 git push origin main
-git tag -a v0.1.0-beta.1 -m "IP deployment beta 1"
-git push origin v0.1.0-beta.1
+git tag -a v0.1.0-beta.2 -m "4096-dimension IP deployment beta"
+git push origin v0.1.0-beta.2
 ```
 
 只有在审核当前任务的 Changes 并决定保留修改后，才执行上述合并、推送和打标签操作。
@@ -81,6 +81,20 @@ df -h
 free -h
 ```
 
+当前 2 核 4 GB 实例使用 4096 维向量时，先创建 4 GB swap，降低首次构建和重建索引期间被系统终止的风险：
+
+```bash
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -h
+swapon --show
+```
+
+如果 `/swapfile` 已存在，不要重复执行上述命令；先运行 `swapon --show` 检查现状。
+
 初始化：
 
 ```bash
@@ -112,7 +126,7 @@ git clone --recurse-submodules \
   https://github.com/ninesuns-hub/teaching_assistant.git app
 cd app
 git fetch --tags
-git checkout --detach v0.1.0-beta.1
+git checkout --detach v0.1.0-beta.2
 git submodule sync --recursive
 git submodule update --init --recursive
 git submodule status
@@ -138,12 +152,20 @@ STORAGE_HOST_PATH=/srv/teaching-assistant/storage
 MYSQL_HOST=mysql
 REDIS_HOST=redis
 QDRANT_PATH=/app/storage/processed/vector_db
+EMBED_BASE_URL=https://api.siliconflow.cn/v1
+EMBED_MODEL_NAME=Qwen/Qwen3-VL-Embedding-8B
+EMBED_DIMENSION=4096
+EMBED_BATCH_SIZE=32
+VISION_BASE_URL=https://api.siliconflow.cn/v1
+VISION_MODEL_NAME=Pro/moonshotai/Kimi-K2.6
 ALLOWED_ORIGINS=http://服务器公网IP
 CHAT_CONTEXT_ENABLED=true
 CONVERSATION_SUMMARY_ENABLED=true
 MEMORY_WRITE_ENABLED=true
 MEMORY_READ_ENABLED=false
 ```
+
+`EMBED_API_KEY` 和 `VISION_API_KEY` 都填写用户在 SiliconFlow 控制台创建的密钥。示例文件故意将这两个值留空，真实密钥只保存在服务器的 `/etc/teaching-assistant/app.env`，不得提交到 Git。
 
 确保 `/srv/teaching-assistant/storage` 可由后端容器用户写入：
 
@@ -258,6 +280,8 @@ docker compose \
   -f compose.production.yml run --rm --no-deps backend \
   python scripts/ingest_docs.py --rebuild-scoped
 ```
+
+该命令会删除旧的 1536 维派生索引并按照 `EMBED_DIMENSION=4096` 重新生成；运行期间保持正式后端停止。完成后检查日志中不存在维数不匹配或 Embedding API 错误。
 
 此阶段不要启动正式后端。
 
