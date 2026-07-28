@@ -26,6 +26,7 @@ class HealthRouteTests(unittest.TestCase):
         qdrant.get_collections.return_value.collections[0].name = (
             "discrete_math_materials"
         )
+        qdrant.get_collection.return_value.config.params.vectors.size = 4096
 
         with tempfile.TemporaryDirectory() as storage_dir:
             with (
@@ -54,6 +55,38 @@ class HealthRouteTests(unittest.TestCase):
 
         self.assertEqual(response["status"], "ready")
         self.assertTrue(all(response["components"].values()))
+
+    def test_ready_rejects_wrong_qdrant_dimension(self):
+        qdrant = MagicMock()
+        collection = MagicMock()
+        collection.name = "discrete_math_materials"
+        qdrant.get_collections.return_value.collections = [collection]
+        qdrant.get_collection.return_value.config.params.vectors.size = 1536
+
+        with tempfile.TemporaryDirectory() as storage_dir:
+            with (
+                patch.object(health_routes.settings, "STORAGE_DIR", storage_dir),
+                patch.object(
+                    health_routes.engine,
+                    "connect",
+                    return_value=_ConnectionContext(),
+                ),
+                patch.object(
+                    health_routes.redis_client.client,
+                    "ping",
+                    return_value=True,
+                ),
+                patch.object(
+                    health_routes,
+                    "get_qdrant_client",
+                    return_value=qdrant,
+                ),
+            ):
+                response = health_routes.ready()
+
+        self.assertEqual(response.status_code, 503)
+        payload = json.loads(response.body)
+        self.assertFalse(payload["components"]["qdrant"])
 
     def test_ready_returns_503_without_dependencies(self):
         with tempfile.TemporaryDirectory() as storage_dir:

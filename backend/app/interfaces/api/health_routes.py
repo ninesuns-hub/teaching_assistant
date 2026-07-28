@@ -49,11 +49,19 @@ def ready():
         pass
 
     try:
+        client = get_qdrant_client()
         collections = {
             collection.name
-            for collection in get_qdrant_client().get_collections().collections
+            for collection in client.get_collections().collections
         }
-        components["qdrant"] = settings.QDRANT_COLLECTION_NAME in collections
+        if settings.QDRANT_COLLECTION_NAME in collections:
+            collection = client.get_collection(settings.QDRANT_COLLECTION_NAME)
+            configured_size = getattr(
+                collection.config.params.vectors,
+                "size",
+                None,
+            )
+            components["qdrant"] = configured_size == settings.EMBED_DIMENSION
     except Exception:
         pass
 

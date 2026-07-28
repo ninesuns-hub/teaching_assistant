@@ -45,13 +45,40 @@ def get_qdrant_client():
     return _qdrant_client
 
 def _embed(texts: List[str]) -> List[List[float]]:
+    if not texts:
+        return []
     client = get_embed_client()
     try:
-        response = client.embeddings.create(
-            input=texts,
-            model=settings.EMBED_MODEL_NAME
-        )
-        return [data.embedding for data in response.data]
+        embeddings: List[List[float]] = []
+        for start in range(0, len(texts), settings.EMBED_BATCH_SIZE):
+            batch = texts[start:start + settings.EMBED_BATCH_SIZE]
+            response = client.embeddings.create(
+                input=batch,
+                model=settings.EMBED_MODEL_NAME,
+                dimensions=settings.EMBED_DIMENSION,
+            )
+            batch_embeddings = [
+                data.embedding
+                for data in sorted(response.data, key=lambda item: item.index)
+            ]
+            if len(batch_embeddings) != len(batch):
+                raise RuntimeError(
+                    "Embedding provider returned "
+                    f"{len(batch_embeddings)} vectors for {len(batch)} inputs"
+                )
+            invalid_dimensions = {
+                len(vector)
+                for vector in batch_embeddings
+                if len(vector) != settings.EMBED_DIMENSION
+            }
+            if invalid_dimensions:
+                raise RuntimeError(
+                    "Embedding provider returned unexpected vector dimensions "
+                    f"{sorted(invalid_dimensions)}; expected "
+                    f"{settings.EMBED_DIMENSION}"
+                )
+            embeddings.extend(batch_embeddings)
+        return embeddings
     except Exception as e:
         logger.error(f"Embedding API Error: {e}")
         raise
@@ -59,7 +86,11 @@ def _embed(texts: List[str]) -> List[List[float]]:
 
 def _embed_query(question: str, request_id: str | None = None) -> List[float]:
     normalized = " ".join(question.casefold().split())
-    cache_key = (settings.EMBED_MODEL_NAME, normalized)
+    cache_key = (
+        settings.EMBED_MODEL_NAME,
+        settings.EMBED_DIMENSION,
+        normalized,
+    )
     now = time.monotonic()
     with _query_embedding_cache_lock:
         cached = _query_embedding_cache.get(cache_key)
@@ -115,8 +146,21 @@ def init_collection():
         logger.info(f"创建 Qdrant 集合: {settings.QDRANT_COLLECTION_NAME}")
         client.create_collection(
             collection_name=settings.QDRANT_COLLECTION_NAME,
-            vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE),
+            vectors_config=models.VectorParams(
+                size=settings.EMBED_DIMENSION,
+                distance=models.Distance.COSINE,
+            ),
         )
+    else:
+        collection = client.get_collection(settings.QDRANT_COLLECTION_NAME)
+        configured_size = getattr(collection.config.params.vectors, "size", None)
+        if configured_size != settings.EMBED_DIMENSION:
+            raise RuntimeError(
+                f"Qdrant collection {settings.QDRANT_COLLECTION_NAME!r} uses "
+                f"{configured_size} dimensions, but EMBED_DIMENSION is "
+                f"{settings.EMBED_DIMENSION}. Stop the backend and rebuild "
+                "the vector index."
+            )
     if not _payload_index_checked:
         if settings.QDRANT_PATH:
             # QdrantLocal evaluates payload filters exactly but does not build
