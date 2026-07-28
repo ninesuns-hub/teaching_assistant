@@ -21,10 +21,20 @@ def init_collection() -> None:
         client.create_collection(
             collection_name=settings.QDRANT_MEMORY_COLLECTION_NAME,
             vectors_config=models.VectorParams(
-                size=1536,
+                size=settings.EMBED_DIMENSION,
                 distance=models.Distance.COSINE,
             ),
         )
+    else:
+        collection = client.get_collection(settings.QDRANT_MEMORY_COLLECTION_NAME)
+        configured_size = getattr(collection.config.params.vectors, "size", None)
+        if configured_size != settings.EMBED_DIMENSION:
+            raise RuntimeError(
+                f"Qdrant collection {settings.QDRANT_MEMORY_COLLECTION_NAME!r} "
+                f"uses {configured_size} dimensions, but EMBED_DIMENSION is "
+                f"{settings.EMBED_DIMENSION}. Stop the backend and rebuild "
+                "the memory vector index."
+            )
     if not settings.QDRANT_PATH:
         collection = client.get_collection(settings.QDRANT_MEMORY_COLLECTION_NAME)
         schema = collection.payload_schema or {}

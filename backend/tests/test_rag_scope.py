@@ -4,6 +4,7 @@ import unittest
 
 from agent_core.tools.knowledge_tools import create_knowledge_tool
 from agent_core.rag.retriever import BM25Retriever
+from agent_core.config.settings import settings
 from app.core.data_manager import DataManager
 from database import vector_repo
 from qdrant_client import QdrantClient
@@ -152,7 +153,8 @@ class RagScopeTests(unittest.TestCase):
         vector_repo._payload_index_checked = False
         vector_repo._collection_ready = False
         vector_repo._embed = lambda texts: [
-            [1.0] + [0.0] * 1535 for _ in texts
+            [1.0] + [0.0] * (settings.EMBED_DIMENSION - 1)
+            for _ in texts
         ]
         try:
             vector_repo.add_documents([
