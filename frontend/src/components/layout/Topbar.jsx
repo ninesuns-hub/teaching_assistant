@@ -37,6 +37,11 @@ export default function Topbar({
               <NavLink className={navClass} to="/homework" onClick={() => onNavigate('homework')}>
                 {t.navHomework}
               </NavLink>
+              {user.is_admin && (
+                <NavLink className={navClass} to="/admin/users" onClick={() => onNavigate('admin/users')}>
+                  {language === 'zh' ? '用户管理' : 'User Admin'}
+                </NavLink>
+              )}
               <button type="button" className="nav-link nav-link-more" disabled title={language === 'zh' ? '即将推出' : 'Coming soon'}>
                 {t.navMore}
               </button>
@@ -68,7 +73,7 @@ export default function Topbar({
         </div>
         {user ? (
           <>
-            <span className="user-badge">{user.name} ({user.role === 'teacher' ? t.auth.teacher : user.role === 'student' ? t.auth.student : '...'})</span>
+            <span className="user-badge">{user.name} ({user.is_admin ? (language === 'zh' ? '管理员' : 'Admin') : user.role === 'teacher' ? t.auth.teacher : user.role === 'student' ? t.auth.student : '...'})</span>
             <button type="button" className="ghost-btn" onClick={onLogout}>{t.auth.logout}</button>
           </>
         ) : (

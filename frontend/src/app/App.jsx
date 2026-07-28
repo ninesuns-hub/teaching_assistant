@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { sendChatMessage, sendWelcomeMessage } from '../api/chat'
-import { sendCode, register, login, selectRole } from '../api/auth'
+import { sendCode, register, login, selectRole, getMe } from '../api/auth'
 import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, deleteClassMaterial, fetchMaterialFile, fetchMaterialPreview } from '../api/classes'
 import { fetchConversations, fetchConversationMessages, deleteConversation, renameConversation, submitConversationFeedback } from '../api/conversations'
 import {
@@ -24,7 +24,7 @@ import {
   fetchHomeworkAttachmentFile,
   downloadSubmissionFile,
 } from '../api/homework'
-import { getStoredUser, setAuth, clearAuth } from '../api/httpClient'
+import { getStoredUser, getToken, setAuth, clearAuth } from '../api/httpClient'
 import { fetchMemorySettings, updateMemorySettings } from '../api/memory'
 import LearningMascot, { LearningReportDrawer } from '../components/LearningMascot'
 import Topbar from '../components/layout/Topbar'
@@ -35,6 +35,7 @@ import MemorySettingsPanel from '../components/MemorySettingsPanel'
 import ChatPage from '../pages/ChatPage'
 import ResourcesPage from '../pages/ResourcesPage'
 import HomeworkPage from '../pages/HomeworkPage'
+import AdminUsersPage from '../pages/AdminUsersPage'
 import { EXAMPLE_PROMPT_GROUPS, SCENE_QUOTES, TRANSLATIONS } from '../config/uiContent'
 import { CODE_COOLDOWN_SEC, TONGJI_EMAIL_RE, getBeijingHour, getMaterialCategory, getRemainingCooldown, getSceneByHour, saveCooldown, sortMaterials } from '../utils/appUtils'
 import { createClientMessageId } from '../utils/clientMessageId'
@@ -655,6 +656,8 @@ function AppController() {
       name: data.name,
       role: data.role,
       needs_role_selection: data.needs_role_selection,
+      is_admin: data.is_admin,
+      status: data.status,
     }
     setAuth(data.access_token, nextUser)
     setUser(nextUser)
@@ -665,6 +668,21 @@ function AppController() {
     if (data.needs_role_selection) setRoleModalOpen(true)
   }
 
+  const refreshCurrentUser = async () => {
+    const data = await getMe()
+    const nextUser = {
+      id: data.id,
+      email: data.email,
+      name: data.name,
+      role: data.role,
+      needs_role_selection: data.needs_role_selection,
+      is_admin: data.is_admin,
+      status: data.status,
+    }
+    setAuth(getToken(), nextUser)
+    setUser(nextUser)
+    return nextUser
+  }
   const handleSendCode = async () => {
     if (codeCooldown > 0 || sendingCode) return
 
@@ -1580,6 +1598,9 @@ function AppController() {
           <HomeworkPage model={viewModel} />
           ) : <Navigate to="/chat" replace />} />
         )}
+        <Route path="/admin/users" element={user?.is_admin ? (
+          <AdminUsersPage currentUser={user} onCurrentUserRefresh={refreshCurrentUser} />
+        ) : <Navigate to="/chat" replace />} />
         </Routes>
       </main>
 
