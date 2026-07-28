@@ -45,8 +45,8 @@ git switch main
 git pull origin main
 git merge --no-ff embedding-4096-deployment
 git push origin main
-git tag -a v0.1.0-beta.2 -m "4096-dimension IP deployment beta"
-git push origin v0.1.0-beta.2
+git tag -a v0.1.0-beta.3 -m "4096-dimension IP deployment beta"
+git push origin v0.1.0-beta.3
 ```
 
 只有在审核当前任务的 Changes 并决定保留修改后，才执行上述合并、推送和打标签操作。
@@ -126,7 +126,7 @@ git clone --recurse-submodules \
   https://github.com/ninesuns-hub/teaching_assistant.git app
 cd app
 git fetch --tags
-git checkout --detach v0.1.0-beta.2
+git checkout --detach v0.1.0-beta.3
 git submodule sync --recursive
 git submodule update --init --recursive
 git submodule status
