@@ -13,8 +13,9 @@ from app.core.auth import get_password_hash, verify_password, create_access_toke
 from app.core.redis_client import redis_client
 from app.core.email_service import send_verification_email, generate_code
 from app.core.validators import is_valid_tongji_email
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, is_effective_admin
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -24,11 +25,14 @@ def _build_token(user: User) -> Token:
     access_token = create_access_token(data={"sub": user.email, "role": user.role.value if user.role else None})
     return Token(
         access_token=access_token,
+        id=user.id,
         token_type="bearer",
         role=user.role.value if user.role else None,
         name=user.name,
         email=user.email,
         needs_role_selection=user.role is None,
+        is_admin=is_effective_admin(user),
+        status=user.status,
     )
 
 
@@ -81,6 +85,10 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == email).first()
     if not db_user or not verify_password(user_data.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="邮箱或密码错误")
+    if db_user.status != "active":
+        raise HTTPException(status_code=403, detail="账号已停用")
+    db_user.last_login_at = datetime.utcnow()
+    db.commit()
     return _build_token(db_user)
 
 
@@ -111,4 +119,6 @@ def get_me(current_user: User = Depends(get_current_user)):
         name=current_user.name,
         role=current_user.role.value if current_user.role else None,
         needs_role_selection=current_user.role is None,
+        is_admin=is_effective_admin(current_user),
+        status=current_user.status,
     )

@@ -107,11 +107,14 @@ class SelectRoleRequest(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    id: int | None = None
     token_type: str
     role: str | None
     name: str | None = None
     email: str | None = None
     needs_role_selection: bool = False
+    is_admin: bool = False
+    status: str = "active"
 
 
 class UserProfile(BaseModel):
@@ -120,6 +123,8 @@ class UserProfile(BaseModel):
     name: str
     role: str | None
     needs_role_selection: bool
+    is_admin: bool = False
+    status: str = "active"
 
 
 class CreateClassRequest(BaseModel):
