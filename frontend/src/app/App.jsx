@@ -37,6 +37,7 @@ import ResourcesPage from '../pages/ResourcesPage'
 import HomeworkPage from '../pages/HomeworkPage'
 import { EXAMPLE_PROMPT_GROUPS, SCENE_QUOTES, TRANSLATIONS } from '../config/uiContent'
 import { CODE_COOLDOWN_SEC, TONGJI_EMAIL_RE, getBeijingHour, getMaterialCategory, getRemainingCooldown, getSceneByHour, saveCooldown, sortMaterials } from '../utils/appUtils'
+import { createClientMessageId } from '../utils/clientMessageId'
 
 const SCENE_OPTIONS = [
   { key: 'night', label: { en: 'Starry Night', zh: '星空黑夜' }, angle: 0 },
@@ -1342,7 +1343,7 @@ function AppController() {
         message: text,
         conversation_id: conversationId,
         class_id: activeClassId,
-        client_message_id: crypto.randomUUID(),
+        client_message_id: createClientMessageId(),
         ...imagePayload,
       }, (event) => {
         setMessages(prev => {
