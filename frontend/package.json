@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test src/utils/clientMessageId.test.js",
+    "test": "node --test src/utils/appUtils.test.js src/utils/clientMessageId.test.js src/utils/fileTypes.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
