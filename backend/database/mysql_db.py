@@ -67,7 +67,12 @@ class User(Base):
     is_admin = Column(Boolean, nullable=False, default=False)
     status = Column(String(20), nullable=False, default="active", index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    updated_at = Column(
+        DateTime,
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
     last_login_at = Column(DateTime, nullable=True)
 
     taught_classes = relationship("ClassRoom", back_populates="teacher")
@@ -77,7 +82,7 @@ class User(Base):
 class AdminAuditLog(Base):
     __tablename__ = "admin_audit_logs"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     target_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     action = Column(String(60), nullable=False, index=True)
@@ -243,7 +248,7 @@ class HomeworkSubmissionAttachment(Base):
     filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
     file_type = Column(String(20), nullable=False)
-    file_size = Column(BigInteger, default=0)
+    file_size = Column(BigInteger, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     submission = relationship("HomeworkSubmission", back_populates="attachments")
