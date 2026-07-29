@@ -23,6 +23,7 @@ import {
   downloadHomeworkAttachment,
   fetchHomeworkAttachmentFile,
   downloadSubmissionFile,
+  fetchSubmissionAttachmentFile,
 } from '../api/homework'
 import { getStoredUser, getToken, setAuth, clearAuth } from '../api/httpClient'
 import { fetchMemorySettings, updateMemorySettings } from '../api/memory'
@@ -31,6 +32,7 @@ import Topbar from '../components/layout/Topbar'
 import SceneBackdrop from '../components/scenes/SceneBackdrop'
 import ChatHistorySidebar from '../components/chat/ChatHistorySidebar'
 import AppModals from '../components/modals/AppModals'
+import AttachmentPreviewModal from '../components/AttachmentPreviewModal'
 import MemorySettingsPanel from '../components/MemorySettingsPanel'
 import ChatPage from '../pages/ChatPage'
 import ResourcesPage from '../pages/ResourcesPage'
@@ -39,11 +41,12 @@ import AdminUsersPage from '../pages/AdminUsersPage'
 import { EXAMPLE_PROMPT_GROUPS, SCENE_QUOTES, TRANSLATIONS } from '../config/uiContent'
 import { CODE_COOLDOWN_SEC, TONGJI_EMAIL_RE, getBeijingHour, getMaterialCategory, getRemainingCooldown, getSceneByHour, saveCooldown, sortMaterials } from '../utils/appUtils'
 import { createClientMessageId } from '../utils/clientMessageId'
+import { getPreviewKind } from '../utils/fileTypes'
 
 const SCENE_OPTIONS = [
   { key: 'night', label: { en: 'Starry Night', zh: '星空黑夜' }, angle: 0 },
   { key: 'day', label: { en: 'Blue Sky', zh: '碧水蓝天' }, angle: 120 },
-  { key: 'sunset', label: { en: 'Sunset', zh: '落日余晖' }, angle: 240 },
+  { key: 'sunset', label: { en: 'Dusk', zh: '黄昏' }, angle: 240 },
 ]
 
 const CHAT_PATH_PATTERN = /^\/chat(?:\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}))?$/
@@ -125,6 +128,7 @@ function AppController() {
   const [expandedHomeworkId, setExpandedHomeworkId] = useState(null)
   const [homeworkSubmissions, setHomeworkSubmissions] = useState({})
   const [submitDrafts, setSubmitDrafts] = useState({})
+  const [attachmentPreview, setAttachmentPreview] = useState(null)
   const [classForm, setClassForm] = useState({ name: '', inviteCode: '' })
   const [conversationId, setConversationId] = useState(null)
   const [conversations, setConversations] = useState([])
@@ -166,6 +170,8 @@ function AppController() {
   const materialsRequestRef = useRef(0)
   const activeClassIdRef = useRef(null)
   const uploadNoticeTimerRef = useRef(null)
+  const attachmentPreviewRequestRef = useRef(0)
+  const attachmentPreviewUrlRef = useRef(null)
   const learningGenerationJobRef = useRef(null)
   const [pendingActions, setPendingActions] = useState({})
 
@@ -293,6 +299,18 @@ function AppController() {
     try {
       const data = await fetchHomeworks(classId)
       setHomeworks(data)
+      setSubmitDrafts(current => {
+        const next = { ...current }
+        data.forEach(homework => {
+          if (!homework.my_submission || next[homework.id]) return
+          next[homework.id] = {
+            content: homework.my_submission.content || '',
+            files: [],
+            retainedAttachmentIds: (homework.my_submission.attachments || []).map(item => item.id),
+          }
+        })
+        return next
+      })
     } catch (err) {
       console.error(err)
       setHomeworks([])
@@ -1009,25 +1027,26 @@ function AppController() {
 
   const openMaterialFile = async (material, download = false) => {
     if (!activeClassId) return
+    const fileRef = {
+      ...material,
+      source: 'material',
+      classId: activeClassId,
+    }
+    if (!download) {
+      openAttachmentPreview(fileRef)
+      return
+    }
     const actionKey = `material:${download ? 'download' : 'view'}:${material.id}`
     return runPendingAction(actionKey, async () => {
       try {
-        const blob = download
-          ? await fetchMaterialFile(activeClassId, material.id, true)
-          : await fetchMaterialPreview(activeClassId, material.id)
+        const blob = await fetchMaterialFile(activeClassId, material.id, true)
         const url = URL.createObjectURL(blob)
-
-        if (download) {
-          const link = document.createElement('a')
-          link.href = url
-          link.download = material.filename
-          document.body.appendChild(link)
-          link.click()
-          link.remove()
-        } else {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        }
-
+        const link = document.createElement('a')
+        link.href = url
+        link.download = material.filename
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
         setTimeout(() => URL.revokeObjectURL(url), 60_000)
       } catch (err) {
         alert(err.message)
@@ -1045,6 +1064,100 @@ function AppController() {
     link.remove()
     setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
+
+  const fetchAttachmentBlob = async (fileRef, download = false) => {
+    if (fileRef.source === 'material') {
+      return download
+        ? fetchMaterialFile(fileRef.classId, fileRef.id, true)
+        : fetchMaterialPreview(fileRef.classId, fileRef.id)
+    }
+    if (fileRef.source === 'homework') {
+      return fetchHomeworkAttachmentFile(
+        fileRef.homeworkId,
+        fileRef.id,
+        download,
+      )
+    }
+    if (fileRef.source === 'submission') {
+      return fetchSubmissionAttachmentFile(
+        fileRef.submissionId,
+        fileRef.id,
+        download,
+      )
+    }
+    throw new Error(language === 'zh' ? '无法识别附件来源' : 'Unknown attachment source')
+  }
+
+  const closeAttachmentPreview = useCallback(() => {
+    attachmentPreviewRequestRef.current += 1
+    if (attachmentPreviewUrlRef.current) {
+      URL.revokeObjectURL(attachmentPreviewUrlRef.current)
+      attachmentPreviewUrlRef.current = null
+    }
+    setAttachmentPreview(null)
+  }, [])
+
+  const openAttachmentPreview = async fileRef => {
+    const previewKind = getPreviewKind(fileRef)
+    const requestId = attachmentPreviewRequestRef.current + 1
+    attachmentPreviewRequestRef.current = requestId
+    if (attachmentPreviewUrlRef.current) {
+      URL.revokeObjectURL(attachmentPreviewUrlRef.current)
+      attachmentPreviewUrlRef.current = null
+    }
+    const basePreview = {
+      ...fileRef,
+      previewKind,
+      status: previewKind === 'unsupported' ? 'unsupported' : 'loading',
+    }
+    setAttachmentPreview(basePreview)
+    if (previewKind === 'unsupported') return
+
+    try {
+      const blob = await fetchAttachmentBlob(fileRef, false)
+      const url = URL.createObjectURL(blob)
+      if (attachmentPreviewRequestRef.current !== requestId) {
+        URL.revokeObjectURL(url)
+        return
+      }
+      attachmentPreviewUrlRef.current = url
+      setAttachmentPreview({
+        ...basePreview,
+        status: 'ready',
+        url,
+      })
+    } catch (error) {
+      if (attachmentPreviewRequestRef.current !== requestId) return
+      setAttachmentPreview({
+        ...basePreview,
+        status: 'error',
+        error: error.message,
+      })
+    }
+  }
+
+  const downloadPreviewAttachment = async () => {
+    if (!attachmentPreview) return
+    const actionKey = `preview:download:${attachmentPreview.source}:${attachmentPreview.id}`
+    return runPendingAction(actionKey, async () => {
+      try {
+        const blob = await fetchAttachmentBlob(attachmentPreview, true)
+        downloadBlobFile(blob, attachmentPreview.filename)
+      } catch (error) {
+        setAttachmentPreview(current => current ? {
+          ...current,
+          status: 'error',
+          error: error.message,
+        } : current)
+      }
+    })
+  }
+
+  useEffect(() => () => {
+    if (attachmentPreviewUrlRef.current) {
+      URL.revokeObjectURL(attachmentPreviewUrlRef.current)
+    }
+  }, [])
 
   const handlePublishHomework = async () => {
     if (!activeClassId || !homeworkForm.title.trim() || homeworkBusy) return
@@ -1089,9 +1202,14 @@ function AppController() {
       try {
         await submitHomework(homeworkId, {
           content: draft.content || '',
-          file: draft.file || null,
+          files: draft.files || [],
+          retainedAttachmentIds: draft.retainedAttachmentIds || [],
         })
-        setSubmitDrafts(prev => ({ ...prev, [homeworkId]: { content: '', file: null } }))
+        setSubmitDrafts(prev => {
+          const next = { ...prev }
+          delete next[homeworkId]
+          return next
+        })
         await loadHomeworks(activeClassId)
       } catch (err) {
         alert(err.message)
@@ -1129,6 +1247,15 @@ function AppController() {
   }
 
   const handleOpenHomeworkAttachment = async (homework, attachment, download = false) => {
+    const fileRef = {
+      ...attachment,
+      source: 'homework',
+      homeworkId: homework.id,
+    }
+    if (!download) {
+      openAttachmentPreview(fileRef)
+      return
+    }
     const actionKey = `homework:attachment:${download ? 'download' : 'view'}:${attachment.id}`
     return runPendingAction(actionKey, async () => {
       try {
@@ -1137,13 +1264,7 @@ function AppController() {
           attachment.id,
           download,
         )
-        if (download) {
-          downloadBlobFile(blob, attachment.filename)
-          return
-        }
-        const url = URL.createObjectURL(blob)
-        window.open(url, '_blank', 'noopener,noreferrer')
-        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        downloadBlobFile(blob, attachment.filename)
       } catch (err) {
         alert(err.message)
       }
@@ -1157,6 +1278,31 @@ function AppController() {
         downloadBlobFile(blob, sub.filename || 'submission')
       } catch (err) {
         alert(err.message)
+      }
+    })
+  }
+
+  const handleOpenSubmissionAttachment = async (submission, attachment, download = false) => {
+    const fileRef = {
+      ...attachment,
+      source: 'submission',
+      submissionId: submission.id,
+    }
+    if (!download) {
+      openAttachmentPreview(fileRef)
+      return
+    }
+    const actionKey = `submission:attachment:download:${attachment.id}`
+    return runPendingAction(actionKey, async () => {
+      try {
+        const blob = await fetchSubmissionAttachmentFile(
+          submission.id,
+          attachment.id,
+          true,
+        )
+        downloadBlobFile(blob, attachment.filename)
+      } catch (error) {
+        alert(error.message)
       }
     })
   }
@@ -1474,6 +1620,7 @@ function AppController() {
     handleDownloadAttachment,
     handleDownloadSubmission,
     handleOpenHomeworkAttachment,
+    handleOpenSubmissionAttachment,
     handleExampleSelect,
     handleFeedback,
     handleJoinClass,
@@ -1639,6 +1786,13 @@ function AppController() {
       <LearningReportDrawer value={learningDrawer} role={user?.role} language={language} onClose={() => setLearningDrawer(null)} />
 
       <AppModals model={viewModel} />
+      <AttachmentPreviewModal
+        language={language}
+        preview={attachmentPreview}
+        scene={activeSceneKey}
+        onClose={closeAttachmentPreview}
+        onDownload={downloadPreviewAttachment}
+      />
       <MemorySettingsPanel
         open={memoryPanelOpen}
         language={language}

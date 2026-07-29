@@ -34,8 +34,8 @@ export function getBeijingHour() {
 }
 
 export function getSceneByHour(hour) {
-  if (hour >= 6 && hour < 17) return 'day'
-  if (hour >= 17 && hour < 20) return 'sunset'
+  if (hour >= 6 && hour < 15) return 'day'
+  if (hour >= 15 && hour < 19) return 'sunset'
   return 'night'
 }
 
