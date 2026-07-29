@@ -1,60 +1,74 @@
 .file-type-icon {
-  position: relative;
   display: inline-flex;
-  flex: 0 0 42px;
-  width: 42px;
-  height: 46px;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 32px;
   align-items: center;
   justify-content: center;
   color: var(--color-accent);
 }
 
 .file-type-icon svg {
-  width: 32px;
-  height: 38px;
-  fill: color-mix(in srgb, currentColor 12%, var(--color-surface-2));
-  stroke: currentColor;
+  width: 26px;
+  height: 30px;
+  overflow: visible;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.5;
+  stroke-width: 1.35;
 }
 
-.file-type-icon small {
-  position: absolute;
-  right: 1px;
-  bottom: 4px;
-  min-width: 27px;
-  padding: 2px 3px;
-  border-radius: 4px;
-  background: currentColor;
-  color: var(--color-accent-contrast);
-  font-size: 8px;
-  font-weight: 800;
-  line-height: 1;
-  text-align: center;
+.file-icon-sheet {
+  fill: #fff;
+  stroke: #aeb7c2;
+  stroke-width: 1.2;
 }
 
-.file-type-icon.is-pdf { color: #d24b43; }
-.file-type-icon.is-word { color: #3479b9; }
-.file-type-icon.is-presentation { color: #c86436; }
+.file-icon-fold {
+  fill: #eef1f5;
+  stroke: #aeb7c2;
+  stroke-width: 1.2;
+}
+
+.file-icon-mark.is-stroke {
+  fill: none;
+  stroke: currentColor;
+}
+
+.file-icon-mark.is-fill {
+  fill: currentColor;
+  stroke: none;
+}
+
+.file-icon-mark.is-light-stroke {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.1;
+}
+
+.file-type-icon.is-pdf { color: #d63f36; }
+.file-type-icon.is-word { color: #3f73b9; }
+.file-type-icon.is-presentation { color: #e06a3e; }
 .file-type-icon.is-image { color: #3c8d68; }
 .file-type-icon.is-archive { color: #8264b1; }
-.file-type-icon.is-large { width: 50px; height: 54px; flex-basis: 50px; }
-.file-type-icon.is-large svg { width: 38px; height: 46px; }
+.file-type-icon.is-file { color: #6f7a86; }
+.file-type-icon.is-large { width: 36px; height: 42px; flex-basis: 36px; }
+.file-type-icon.is-large svg { width: 34px; height: 40px; }
 
 .attachment-file-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  width: 100%;
 }
 
 .attachment-file-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-2) var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
   align-items: center;
   min-width: 0;
-  padding: 12px;
+  width: 100%;
+  padding: 9px 10px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control);
   background: var(--color-surface-2);
@@ -67,11 +81,14 @@
 }
 
 .attachment-file-main strong {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--font-size-control);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .attachment-file-main span {
@@ -81,11 +98,15 @@
 
 .attachment-file-actions {
   display: flex;
-  grid-column: 1 / -1;
-  justify-content: flex-end;
+  flex: 0 0 auto;
+  align-items: center;
   gap: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border-subtle);
+}
+
+.attachment-file-actions .download-btn {
+  min-height: 34px;
+  padding: 5px 12px;
+  white-space: nowrap;
 }
 
 .attachment-preview-overlay {
@@ -220,20 +241,22 @@
 }
 
 .download-btn.danger {
-  border-color: var(--color-danger-border);
-  background: var(--color-danger-surface);
-  color: var(--color-danger);
-  font-weight: 650;
+  font-weight: inherit;
 }
 
-.download-btn.danger:hover:not(:disabled) {
+.download-btn.danger:hover:not(:disabled),
+.download-btn.danger:active:not(:disabled),
+.download-btn.danger:focus-visible:not(:disabled) {
   border-color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger-surface) 72%, var(--color-danger));
   color: var(--color-danger);
+}
+
+.download-btn.danger:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-.download-btn.danger:focus-visible {
+.download-btn.danger:focus-visible:not(:disabled) {
   outline: 3px solid color-mix(in srgb, var(--color-danger) 38%, transparent);
   outline-offset: 2px;
 }
@@ -252,31 +275,30 @@
 
 .submission-card {
   display: grid;
-  gap: var(--space-4);
-  padding: 18px;
+  gap: 10px;
+  padding: 14px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-card);
   background: var(--color-surface-2);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-canvas) 12%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-canvas) 9%, transparent);
 }
 
 .submission-card-header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--space-3);
+  gap: 10px;
   align-items: center;
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .submission-student-mark {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface-1));
   color: var(--color-accent);
+  font-size: var(--font-size-meta);
   font-weight: 800;
 }
 
@@ -299,23 +321,12 @@
   background: var(--color-surface-1);
 }
 
-.submission-note {
-  padding: 12px 14px;
-  border-left: 3px solid var(--color-accent);
-  border-radius: 0 var(--radius-control) var(--radius-control) 0;
-  background: var(--color-surface-1);
-}
-
-.submission-note span {
-  color: var(--color-text-meta);
-  font-size: var(--font-size-caption);
-  font-weight: 700;
-}
-
-.submission-note p {
-  margin: 5px 0 0;
+.submission-text {
+  margin: 0;
+  color: var(--color-text-primary);
   line-height: 1.6;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .submission-draft-files {
@@ -370,8 +381,7 @@
 }
 
 [data-scene="day"] .homework-attachments,
-[data-scene="day"] .homework-submit,
-[data-scene="day"] .submission-note {
+[data-scene="day"] .homework-submit {
   border-color: rgba(37, 79, 111, 0.2);
   background: rgba(235, 245, 251, 0.86);
 }
@@ -391,8 +401,9 @@
 }
 
 @media (max-width: 720px) {
-  .attachment-file-grid {
-    grid-template-columns: 1fr;
+  .homework-panel,
+  .homework-card {
+    padding: 12px;
   }
 
   .attachment-preview-overlay {
@@ -423,20 +434,44 @@
   }
 
   .submission-card-header {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .submission-attachment-count {
-    grid-column: 2;
-    justify-self: start;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .submission-draft-file {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
+  .attachment-file-card,
+  .submission-draft-file {
+    gap: 6px;
+    padding: 7px;
+  }
+
+  .attachment-file-card > .file-type-icon,
+  .submission-draft-file > .file-type-icon {
+    width: 24px;
+    height: 28px;
+    flex-basis: 24px;
+  }
+
+  .attachment-file-card > .file-type-icon svg,
+  .submission-draft-file > .file-type-icon svg {
+    width: 22px;
+    height: 26px;
+  }
+
+  .attachment-file-actions {
+    gap: 2px;
+  }
+
+  .attachment-file-actions .download-btn,
   .submission-draft-file > button {
-    grid-column: 1 / -1;
-    justify-self: stretch;
+    min-height: 30px;
+    padding: 3px 5px;
+    font-size: var(--font-size-caption);
+  }
+
+  .submission-card {
+    padding: 10px;
   }
 }

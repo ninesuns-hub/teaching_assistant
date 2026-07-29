@@ -377,7 +377,9 @@ export default function HomeworkPage({ model }) {
                               </div>
                               {subs.length === 0 ? (
                                 <p className="muted">{t.auth.noHomework}</p>
-                              ) : subs.map(sub => (
+                              ) : subs.map(sub => {
+                                const attachmentCount = sub.attachments?.length || (sub.has_file ? 1 : 0)
+                                return (
                                 <article key={sub.id} className="submission-card">
                                   <header className="submission-card-header">
                                     <div className="submission-student-mark" aria-hidden="true">
@@ -387,17 +389,16 @@ export default function HomeworkPage({ model }) {
                                       <strong>{sub.student_name}</strong>
                                       <span>{sub.submitted_at?.slice(0, 16).replace('T', ' ')}</span>
                                     </div>
-                                    <span className="submission-attachment-count">
-                                      {language === 'zh'
-                                        ? `${sub.attachments?.length || (sub.has_file ? 1 : 0)}个附件`
-                                        : `${sub.attachments?.length || (sub.has_file ? 1 : 0)} attachments`}
-                                    </span>
+                                    {attachmentCount > 0 && (
+                                      <span className="submission-attachment-count">
+                                        {language === 'zh'
+                                          ? `${attachmentCount}个附件`
+                                          : `${attachmentCount} attachments`}
+                                      </span>
+                                    )}
                                   </header>
                                   {sub.content && (
-                                    <div className="submission-note">
-                                      <span>{language === 'zh' ? '文字说明' : 'Note'}</span>
-                                      <p>{sub.content}</p>
-                                    </div>
+                                    <p className="submission-text">{sub.content}</p>
                                   )}
                                   {sub.attachments?.length > 0 && (
                                     <div className="attachment-file-grid submission-attachment-grid">
@@ -422,7 +423,8 @@ export default function HomeworkPage({ model }) {
                                     </div>
                                   )}
                                 </article>
-                              ))}
+                                )
+                              })}
                             </div>
                           )}
                         </div>
