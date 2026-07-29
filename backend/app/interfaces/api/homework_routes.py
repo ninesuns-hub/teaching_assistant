@@ -1,3 +1,4 @@
+import json
 import mimetypes
 import os
 import shutil
@@ -21,6 +22,9 @@ from .schemas import HomeworkAttachmentResponse, HomeworkResponse, HomeworkSubmi
 router = APIRouter()
 
 ALLOWED_EXTS = {".pdf", ".pptx", ".ppsx", ".doc", ".docx", ".zip", ".png", ".jpg", ".jpeg"}
+MAX_SUBMISSION_FILES = 5
+MAX_SUBMISSION_FILE_SIZE = 20 * 1024 * 1024
+MAX_SUBMISSION_TOTAL_SIZE = 50 * 1024 * 1024
 
 
 def _parse_due_at(raw: Optional[str]) -> Optional[datetime]:
@@ -42,6 +46,36 @@ def _serialize_attachment(attachment) -> HomeworkAttachmentResponse:
         filename=attachment.filename,
         file_type=attachment.file_type,
         file_size=attachment.file_size or 0,
+    )
+
+
+def _serialize_submission_attachment(attachment) -> HomeworkAttachmentResponse:
+    return HomeworkAttachmentResponse(
+        id=attachment.id,
+        filename=attachment.filename,
+        file_type=attachment.file_type,
+        file_size=attachment.file_size or 0,
+    )
+
+
+def _serialize_submission(submission, student_name: str | None = None) -> HomeworkSubmissionResponse:
+    attachments = [
+        _serialize_submission_attachment(item)
+        for item in submission.attachments
+    ]
+    first = attachments[0] if attachments else None
+    return HomeworkSubmissionResponse(
+        id=submission.id,
+        homework_id=submission.homework_id,
+        student_id=submission.student_id,
+        student_name=student_name,
+        content=submission.content,
+        filename=first.filename if first else submission.filename,
+        file_type=first.file_type if first else submission.file_type,
+        file_size=first.file_size if first else (submission.file_size or 0),
+        has_file=bool(attachments or submission.file_path),
+        attachments=attachments,
+        submitted_at=submission.submitted_at.isoformat() if submission.submitted_at else None,
     )
 
 
@@ -111,6 +145,35 @@ def _build_office_preview(file_path: str, filename: str, ext: str) -> str:
     return _preview_html(filename, blocks)
 
 
+def _serve_previewable_file(
+    file_path: str,
+    filename: str,
+    download: bool,
+):
+    ext = os.path.splitext(filename)[1].lower()
+    media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    if download:
+        return FileResponse(
+            file_path,
+            filename=filename,
+            media_type=media_type,
+            content_disposition_type="attachment",
+        )
+    if ext in {".pdf", ".png", ".jpg", ".jpeg"}:
+        return FileResponse(
+            file_path,
+            filename=filename,
+            media_type=media_type,
+            content_disposition_type="inline",
+        )
+    if ext in {".pptx", ".ppsx", ".docx"}:
+        try:
+            return HTMLResponse(_build_office_preview(file_path, filename, ext))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"生成预览失败: {exc}") from exc
+    raise HTTPException(status_code=400, detail="该附件格式不支持在线预览，请下载后查看")
+
+
 def _remove_file_if_safe(path: str | None) -> None:
     if not path:
         return
@@ -137,11 +200,16 @@ def list_homeworks(
         if current_user.role == UserRole.STUDENT:
             mine = homework_repo.get_student_submission(db, hw.id, current_user.id)
             if mine:
+                mine_attachments = homework_repo.list_submission_attachments(db, mine.id)
                 my_sub = {
                     "id": mine.id,
                     "content": mine.content,
-                    "filename": mine.filename,
-                    "has_file": bool(mine.file_path),
+                    "filename": mine_attachments[0].filename if mine_attachments else mine.filename,
+                    "has_file": bool(mine_attachments or mine.file_path),
+                    "attachments": [
+                        _serialize_submission_attachment(item).model_dump()
+                        for item in mine_attachments
+                    ],
                     "submitted_at": mine.submitted_at.isoformat() if mine.submitted_at else None,
                 }
         attachments = homework_repo.list_attachments(db, hw.id)
@@ -244,6 +312,11 @@ def delete_homework(
         hw.attachment_path,
         *(attachment.file_path for attachment in hw.attachments),
         *(submission.file_path for submission in hw.submissions),
+        *(
+            attachment.file_path
+            for submission in hw.submissions
+            for attachment in submission.attachments
+        ),
     }
     for path in paths:
         _remove_file_if_safe(path)
@@ -333,7 +406,9 @@ def download_homework_attachment(
 async def submit_homework(
     homework_id: int,
     content: str = Form(""),
+    files: list[UploadFile] | None = File(None),
     file: UploadFile | None = File(None),
+    retained_attachment_ids: str | None = Form(None),
     current_user: User = Depends(require_role(UserRole.STUDENT)),
     db: Session = Depends(get_db),
 ):
@@ -343,55 +418,101 @@ async def submit_homework(
     if not class_repo.user_can_access_class(db, current_user, hw.class_id):
         raise HTTPException(status_code=403, detail="无权提交该作业")
 
-    file_path = filename = file_type = None
-    file_size = 0
+    existing = homework_repo.get_student_submission(db, homework_id, current_user.id)
+    existing_attachments = (
+        homework_repo.list_submission_attachments(db, existing.id)
+        if existing else []
+    )
+    existing_by_id = {item.id: item for item in existing_attachments}
+
+    if retained_attachment_ids is None:
+        retained_ids = set(existing_by_id)
+    else:
+        try:
+            parsed_ids = json.loads(retained_attachment_ids)
+            if not isinstance(parsed_ids, list):
+                raise ValueError
+            retained_ids = {int(item) for item in parsed_ids}
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="保留附件清单格式无效") from exc
+        if not retained_ids.issubset(existing_by_id):
+            raise HTTPException(status_code=400, detail="保留附件清单包含无效附件")
+
+    incoming_files = [item for item in (files or []) if item and item.filename]
     if file and file.filename:
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in ALLOWED_EXTS:
-            raise HTTPException(status_code=400, detail="不支持的提交文件格式")
-        raw = await file.read()
-        saved = data_manager.save_homework_file(
-            raw,
-            file.filename,
-            hw.class_id,
-            kind="submission",
-            homework_id=hw.id,
+        if files or retained_attachment_ids is not None:
+            incoming_files.append(file)
+        else:
+            retained_ids = set()
+            incoming_files = [file]
+
+    if len(retained_ids) + len(incoming_files) > MAX_SUBMISSION_FILES:
+        raise HTTPException(status_code=400, detail="每份作业最多提交5个附件")
+
+    prepared_files: list[dict] = []
+    retained_total = sum(existing_by_id[item].file_size or 0 for item in retained_ids)
+    new_total = 0
+    for upload in incoming_files:
+        filename = os.path.basename(upload.filename or "").strip()
+        ext = os.path.splitext(filename)[1].lower()
+        if not filename or ext not in ALLOWED_EXTS:
+            raise HTTPException(status_code=400, detail=f"不支持的提交文件格式: {filename}")
+        raw = await upload.read()
+        if len(raw) > MAX_SUBMISSION_FILE_SIZE:
+            raise HTTPException(status_code=400, detail=f"附件超过20MB限制: {filename}")
+        new_total += len(raw)
+        if retained_total + new_total > MAX_SUBMISSION_TOTAL_SIZE:
+            raise HTTPException(status_code=400, detail="全部附件合计不能超过50MB")
+        prepared_files.append({
+            "filename": filename,
+            "file_type": ext.lstrip("."),
+            "file_size": len(raw),
+            "content": raw,
+        })
+
+    if not (content or "").strip() and not retained_ids and not prepared_files:
+        raise HTTPException(status_code=400, detail="请填写文字说明或上传文件")
+
+    saved_paths: list[str] = []
+    new_attachments: list[dict] = []
+    try:
+        for item in prepared_files:
+            saved = data_manager.save_submission_attachment(
+                item["content"],
+                item["filename"],
+                hw.class_id,
+                hw.id,
+                current_user.id,
+            )
+            if saved["status"] != "success":
+                raise RuntimeError(saved.get("message", "提交文件保存失败"))
+            saved_paths.append(saved["path"])
+            new_attachments.append({
+                **item,
+                "file_path": saved["path"],
+            })
+
+        sub, removed_paths = homework_repo.save_submission_with_attachments(
+            db=db,
+            homework_id=homework_id,
             student_id=current_user.id,
+            content=content,
+            retained_attachment_ids=retained_ids,
+            new_attachments=new_attachments,
         )
-        if saved["status"] != "success":
-            raise HTTPException(status_code=500, detail=saved.get("message", "提交文件保存失败"))
-        file_path = saved["path"]
-        filename = file.filename
-        file_type = ext.lstrip(".")
-        file_size = len(raw)
+    except HTTPException:
+        for path in saved_paths:
+            _remove_file_if_safe(path)
+        raise
+    except Exception as exc:
+        for path in saved_paths:
+            _remove_file_if_safe(path)
+        raise HTTPException(status_code=500, detail=f"提交作业失败: {exc}") from exc
 
-    if not (content or "").strip() and not file_path:
-        existing = homework_repo.get_student_submission(db, homework_id, current_user.id)
-        if not existing:
-            raise HTTPException(status_code=400, detail="请填写文字说明或上传文件")
-
-    sub = homework_repo.upsert_submission(
-        db=db,
-        homework_id=homework_id,
-        student_id=current_user.id,
-        content=content,
-        file_path=file_path,
-        filename=filename,
-        file_type=file_type,
-        file_size=file_size,
-    )
-    return HomeworkSubmissionResponse(
-        id=sub.id,
-        homework_id=sub.homework_id,
-        student_id=sub.student_id,
-        student_name=current_user.name,
-        content=sub.content,
-        filename=sub.filename,
-        file_type=sub.file_type,
-        file_size=sub.file_size or 0,
-        has_file=bool(sub.file_path),
-        submitted_at=sub.submitted_at.isoformat() if sub.submitted_at else None,
-    )
+    for path in removed_paths:
+        _remove_file_if_safe(path)
+    db.refresh(sub)
+    return _serialize_submission(sub, current_user.name)
 
 
 @router.get("/homeworks/{homework_id}/submissions", response_model=list[HomeworkSubmissionResponse])
@@ -407,6 +528,41 @@ def list_homework_submissions(
         raise HTTPException(status_code=403, detail="无权查看提交")
     rows = homework_repo.list_submissions(db, homework_id)
     return [HomeworkSubmissionResponse(**row) for row in rows]
+
+
+@router.get("/submissions/{submission_id}/attachments/{attachment_id}/file")
+def get_submission_attachment_file(
+    submission_id: int,
+    attachment_id: int,
+    download: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sub = homework_repo.get_submission(db, submission_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="提交不存在")
+    hw = homework_repo.get_homework(db, sub.homework_id)
+    if not hw:
+        raise HTTPException(status_code=404, detail="作业不存在")
+
+    is_owner = class_repo.user_owns_class(db, current_user, hw.class_id)
+    is_self = current_user.id == sub.student_id
+    if not (is_owner or is_self):
+        raise HTTPException(status_code=403, detail="无权访问该提交附件")
+
+    attachment = homework_repo.get_submission_attachment(
+        db,
+        submission_id,
+        attachment_id,
+    )
+    if not attachment:
+        raise HTTPException(status_code=404, detail="提交附件不存在")
+
+    file_path = os.path.realpath(attachment.file_path)
+    base_dir = os.path.realpath(settings.HOMEWORK_DIR)
+    if os.path.commonpath([file_path, base_dir]) != base_dir or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="提交附件文件缺失")
+    return _serve_previewable_file(file_path, attachment.filename, download)
 
 
 @router.get("/submissions/{submission_id}/file")
@@ -426,11 +582,14 @@ def download_submission_file(
     is_self = current_user.id == sub.student_id
     if not (is_owner or is_self):
         raise HTTPException(status_code=403, detail="无权下载该提交")
-    if not os.path.isfile(sub.file_path):
+    file_path = os.path.realpath(sub.file_path)
+    base_dir = os.path.realpath(settings.HOMEWORK_DIR)
+    if os.path.commonpath([file_path, base_dir]) != base_dir or not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="文件缺失")
 
     return FileResponse(
-        sub.file_path,
-        filename=sub.filename or os.path.basename(sub.file_path),
-        media_type=mimetypes.guess_type(sub.file_path)[0] or "application/octet-stream",
+        file_path,
+        filename=sub.filename or os.path.basename(file_path),
+        media_type=mimetypes.guess_type(file_path)[0] or "application/octet-stream",
+        content_disposition_type="attachment",
     )

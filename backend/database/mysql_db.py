@@ -222,6 +222,31 @@ class HomeworkSubmission(Base):
     submitted_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     homework = relationship("HomeworkAssignment", back_populates="submissions")
+    attachments = relationship(
+        "HomeworkSubmissionAttachment",
+        back_populates="submission",
+        cascade="all, delete-orphan",
+        order_by="HomeworkSubmissionAttachment.id",
+    )
+
+
+class HomeworkSubmissionAttachment(Base):
+    __tablename__ = "homework_submission_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    submission_id = Column(
+        Integer,
+        ForeignKey("homework_submissions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_type = Column(String(20), nullable=False)
+    file_size = Column(BigInteger, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    submission = relationship("HomeworkSubmission", back_populates="attachments")
 
 
 class Conversation(Base):

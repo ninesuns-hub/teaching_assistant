@@ -17,6 +17,7 @@ from database.mysql_db import (  # noqa: E402
     HomeworkAssignment,
     HomeworkAttachment,
     HomeworkSubmission,
+    HomeworkSubmissionAttachment,
     RagDocumentSource,
     SessionLocal,
 )
@@ -27,6 +28,7 @@ PATH_COLUMNS = (
     (HomeworkAssignment, "attachment_path", False),
     (HomeworkAttachment, "file_path", False),
     (HomeworkSubmission, "file_path", False),
+    (HomeworkSubmissionAttachment, "file_path", False),
     (ChatMessage, "image_path", True),
     (RagDocumentSource, "file_path", False),
 )
