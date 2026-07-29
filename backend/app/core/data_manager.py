@@ -134,6 +134,34 @@ class DataManager:
             logger.error("保存作业附件失败: %s", exc)
             return {"status": "error", "message": str(exc)}
 
+    def save_submission_attachment(
+        self,
+        file_content: bytes,
+        filename: str,
+        class_id: int,
+        homework_id: int,
+        student_id: int,
+    ):
+        """Save a submission attachment with a collision-resistant disk name."""
+        target_dir = os.path.join(
+            settings.HOMEWORK_DIR,
+            str(class_id),
+            "submissions",
+            str(homework_id),
+            str(student_id),
+        )
+        os.makedirs(target_dir, exist_ok=True)
+        safe_name = os.path.basename(filename)
+        ext = os.path.splitext(safe_name)[1].lower()
+        target_path = os.path.join(target_dir, f"{uuid.uuid4().hex}{ext}")
+        try:
+            with open(target_path, "wb") as file_obj:
+                file_obj.write(file_content)
+            return {"status": "success", "path": target_path}
+        except Exception as exc:
+            logger.error("保存学生作业附件失败: %s", exc)
+            return {"status": "error", "message": str(exc)}
+
     def ingest_file(self, file_path: str, metadata: Dict[str, Any] | None = None):
         """
         手动触发单个文件的 RAG 入库

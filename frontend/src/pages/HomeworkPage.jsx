@@ -1,3 +1,46 @@
+import FileTypeIcon from '../components/FileTypeIcon'
+import { formatFileSize } from '../utils/fileTypes'
+
+const MAX_SUBMISSION_FILES = 5
+const MAX_SUBMISSION_FILE_SIZE = 20 * 1024 * 1024
+const MAX_SUBMISSION_TOTAL_SIZE = 50 * 1024 * 1024
+
+function TrashIcon() {
+  return (
+    <svg className="button-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" />
+    </svg>
+  )
+}
+
+function AttachmentCard({
+  attachment,
+  downloadBusy,
+  language,
+  onDownload,
+  onPreview,
+  previewBusy,
+}) {
+  const zh = language === 'zh'
+  return (
+    <div className="attachment-file-card">
+      <FileTypeIcon file={attachment} />
+      <div className="attachment-file-main">
+        <strong title={attachment.filename}>{attachment.filename}</strong>
+        {formatFileSize(attachment.file_size) && <span>{formatFileSize(attachment.file_size)}</span>}
+      </div>
+      <div className="attachment-file-actions">
+        <button type="button" className="download-btn" disabled={previewBusy} onClick={onPreview}>
+          {previewBusy ? (zh ? '打开中…' : 'Opening…') : (zh ? '预览' : 'Preview')}
+        </button>
+        <button type="button" className="download-btn" disabled={downloadBusy} onClick={onDownload}>
+          {downloadBusy ? (zh ? '下载中…' : 'Downloading…') : (zh ? '下载' : 'Download')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function HomeworkPage({ model }) {
   const {
     activeClassId,
@@ -6,6 +49,7 @@ export default function HomeworkPage({ model }) {
     handleDownloadAttachment,
     handleDownloadSubmission,
     handleOpenHomeworkAttachment,
+    handleOpenSubmissionAttachment,
     handlePublishHomework,
     handleSubmitHomework,
     handleToggleSubmissions,
@@ -17,6 +61,7 @@ export default function HomeworkPage({ model }) {
     isActionPending,
     isStudent,
     isTeacher,
+    language,
     setHomeworkFiles,
     setHomeworkForm,
     setSubmitDrafts,
@@ -34,6 +79,52 @@ export default function HomeworkPage({ model }) {
       ]
     })
     event.target.value = ''
+  }
+
+  const updateSubmissionDraft = (homeworkId, draft, changes) => {
+    setSubmitDrafts(current => ({
+      ...current,
+      [homeworkId]: { ...draft, ...changes },
+    }))
+  }
+
+  const addSubmissionFiles = (homework, draft, event) => {
+    const selected = Array.from(event.target.files || [])
+    event.target.value = ''
+    const oversized = selected.find(file => file.size > MAX_SUBMISSION_FILE_SIZE)
+    if (oversized) {
+      window.alert(language === 'zh'
+        ? `${oversized.name} 超过单个文件20MB限制`
+        : `${oversized.name} exceeds the 20 MB per-file limit`)
+      return
+    }
+    const currentFiles = draft.files || []
+    const signatures = new Set(
+      currentFiles.map(file => `${file.name}:${file.size}:${file.lastModified}`),
+    )
+    const merged = [
+      ...currentFiles,
+      ...selected.filter(file => !signatures.has(`${file.name}:${file.size}:${file.lastModified}`)),
+    ]
+    const retainedIds = draft.retainedAttachmentIds || []
+    const retainedSet = new Set(retainedIds)
+    const retainedSize = (homework.my_submission?.attachments || [])
+      .filter(item => retainedSet.has(item.id))
+      .reduce((total, item) => total + (item.file_size || 0), 0)
+    if (retainedIds.length + merged.length > MAX_SUBMISSION_FILES) {
+      window.alert(language === 'zh'
+        ? '每份作业最多保留和上传5个附件'
+        : 'A submission can contain at most 5 attachments')
+      return
+    }
+    const totalSize = retainedSize + merged.reduce((total, file) => total + file.size, 0)
+    if (totalSize > MAX_SUBMISSION_TOTAL_SIZE) {
+      window.alert(language === 'zh'
+        ? '全部附件合计不能超过50MB'
+        : 'All attachments together cannot exceed 50 MB')
+      return
+    }
+    updateSubmissionDraft(homework.id, draft, { files: merged })
   }
 
   return (
@@ -116,7 +207,13 @@ export default function HomeworkPage({ model }) {
                 ) : (
                   <div className="homework-list">
                     {homeworks.map(hw => {
-                      const draft = submitDrafts[hw.id] || {}
+                      const existingSubmissionAttachments = hw.my_submission?.attachments || []
+                      const draft = submitDrafts[hw.id] || {
+                        content: hw.my_submission?.content || '',
+                        files: [],
+                        retainedAttachmentIds: existingSubmissionAttachments.map(item => item.id),
+                      }
+                      const retainedAttachmentSet = new Set(draft.retainedAttachmentIds || [])
                       const subs = homeworkSubmissions[hw.id] || []
                       return (
                         <div key={hw.id} className="homework-card">
@@ -136,34 +233,19 @@ export default function HomeworkPage({ model }) {
                               {hw.attachments?.length > 0 && (
                                 <div className="homework-attachments">
                                   <strong>{t.auth.homeworkAttachments}</strong>
-                                  {hw.attachments.map(attachment => (
-                                    <div key={attachment.id} className="homework-attachment-row">
-                                      <span>
-                                        {attachment.filename}
-                                        {attachment.file_size > 0 && (
-                                          <small>{(attachment.file_size / 1024 / 1024).toFixed(2)} MB</small>
-                                        )}
-                                      </span>
-                                      <div className="card-actions">
-                                        <button
-                                          type="button"
-                                          className="download-btn"
-                                          disabled={isActionPending(`homework:attachment:view:${attachment.id}`)}
-                                          onClick={() => handleOpenHomeworkAttachment(hw, attachment, false)}
-                                        >
-                                          {isActionPending(`homework:attachment:view:${attachment.id}`) ? t.auth.opening : t.view}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="download-btn"
-                                          disabled={isActionPending(`homework:attachment:download:${attachment.id}`)}
-                                          onClick={() => handleOpenHomeworkAttachment(hw, attachment, true)}
-                                        >
-                                          {isActionPending(`homework:attachment:download:${attachment.id}`) ? t.auth.downloading : t.download}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
+                                  <div className="attachment-file-grid">
+                                    {hw.attachments.map(attachment => (
+                                      <AttachmentCard
+                                        key={attachment.id}
+                                        attachment={attachment}
+                                        language={language}
+                                        previewBusy={isActionPending(`homework:attachment:view:${attachment.id}`)}
+                                        downloadBusy={isActionPending(`homework:attachment:download:${attachment.id}`)}
+                                        onPreview={() => handleOpenHomeworkAttachment(hw, attachment, false)}
+                                        onDownload={() => handleOpenHomeworkAttachment(hw, attachment, true)}
+                                      />
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -179,6 +261,7 @@ export default function HomeworkPage({ model }) {
                                     {isActionPending(`homework:submissions:${hw.id}`) ? t.auth.loading : (expandedHomeworkId === hw.id ? t.auth.hideSubmissions : t.auth.viewSubmissions)}
                                   </button>
                                   <button type="button" className="download-btn danger" disabled={isActionPending(`homework:delete:${hw.id}`)} aria-busy={isActionPending(`homework:delete:${hw.id}`)} onClick={() => handleDeleteHomework(hw.id)}>
+                                    <TrashIcon />
                                     {isActionPending(`homework:delete:${hw.id}`) ? t.auth.deleting : t.auth.deleteHomework}
                                   </button>
                                 </>
@@ -190,60 +273,155 @@ export default function HomeworkPage({ model }) {
                             <div className="homework-submit">
                               <textarea
                                 value={draft.content || ''}
-                                onChange={e => setSubmitDrafts(prev => ({
-                                  ...prev,
-                                  [hw.id]: { ...draft, content: e.target.value },
-                                }))}
+                                onChange={event => updateSubmissionDraft(
+                                  hw.id,
+                                  draft,
+                                  { content: event.target.value },
+                                )}
                                 placeholder={t.auth.submissionNote}
                                 rows={2}
                               />
                               <div className="homework-publish-row">
                                 <label className="upload-btn soft">
-                                  {draft.file ? draft.file.name : t.auth.uploadSubmission}
+                                  {(draft.files || []).length > 0
+                                    ? (language === 'zh'
+                                      ? `已选择${draft.files.length}个新附件`
+                                      : `${draft.files.length} new attachments`)
+                                    : t.auth.uploadSubmission}
                                   <input
                                     type="file"
+                                    multiple
                                     accept=".pdf,.pptx,.ppsx,.doc,.docx,.zip,.png,.jpg,.jpeg"
                                     className="visually-hidden-file-input"
                                     disabled={homeworkBusy}
-                                    onChange={e => setSubmitDrafts(prev => ({
-                                      ...prev,
-                                      [hw.id]: { ...draft, file: e.target.files?.[0] || null },
-                                    }))}
+                                    onChange={event => addSubmissionFiles(hw, draft, event)}
                                   />
                                 </label>
                                 <button
                                   type="button"
                                   className="action-btn action-btn-primary"
-                                  disabled={homeworkBusy}
+                                  disabled={
+                                    homeworkBusy
+                                    || (
+                                      !(draft.content || '').trim()
+                                      && retainedAttachmentSet.size === 0
+                                      && (draft.files || []).length === 0
+                                    )
+                                  }
                                   aria-busy={isActionPending(`homework:submit:${hw.id}`)}
                                   onClick={() => handleSubmitHomework(hw.id)}
                                 >
                                   {isActionPending(`homework:submit:${hw.id}`) ? t.auth.submitting : (hw.my_submission ? t.auth.resubmitHomework : t.auth.submitHomework)}
                                 </button>
                               </div>
-                              {hw.my_submission?.filename && (
-                                <p className="muted-inline">{hw.my_submission.filename}</p>
+                              {(existingSubmissionAttachments.length > 0 || (draft.files || []).length > 0) && (
+                                <div className="submission-draft-files">
+                                  {existingSubmissionAttachments.map(attachment => {
+                                    const retained = retainedAttachmentSet.has(attachment.id)
+                                    return (
+                                      <div key={attachment.id} className={`submission-draft-file${retained ? '' : ' is-removed'}`}>
+                                        <FileTypeIcon file={attachment} />
+                                        <div>
+                                          <strong>{attachment.filename}</strong>
+                                          <span>
+                                            {retained
+                                              ? (language === 'zh' ? '已有附件' : 'Existing attachment')
+                                              : (language === 'zh' ? '提交后移除' : 'Will be removed')}
+                                          </span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className={retained ? 'download-btn danger' : 'download-btn'}
+                                          onClick={() => updateSubmissionDraft(hw.id, draft, {
+                                            retainedAttachmentIds: retained
+                                              ? (draft.retainedAttachmentIds || []).filter(id => id !== attachment.id)
+                                              : [...(draft.retainedAttachmentIds || []), attachment.id],
+                                          })}
+                                        >
+                                          {retained && <TrashIcon />}
+                                          {retained
+                                            ? (language === 'zh' ? '移除' : 'Remove')
+                                            : (language === 'zh' ? '恢复' : 'Restore')}
+                                        </button>
+                                      </div>
+                                    )
+                                  })}
+                                  {(draft.files || []).map((file, index) => (
+                                    <div key={`${file.name}:${file.size}:${file.lastModified}`} className="submission-draft-file">
+                                      <FileTypeIcon file={{ filename: file.name }} />
+                                      <div>
+                                        <strong>{file.name}</strong>
+                                        <span>{language === 'zh' ? '新附件' : 'New attachment'} · {formatFileSize(file.size)}</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="download-btn danger"
+                                        onClick={() => updateSubmissionDraft(hw.id, draft, {
+                                          files: (draft.files || []).filter((_, fileIndex) => fileIndex !== index),
+                                        })}
+                                      >
+                                        <TrashIcon />
+                                        {language === 'zh' ? '移除' : 'Remove'}
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           )}
 
                           {isTeacher && expandedHomeworkId === hw.id && (
                             <div className="submission-list">
+                              <div className="submission-list-heading">
+                                <strong>{language === 'zh' ? `学生提交（${subs.length}）` : `Student submissions (${subs.length})`}</strong>
+                              </div>
                               {subs.length === 0 ? (
                                 <p className="muted">{t.auth.noHomework}</p>
                               ) : subs.map(sub => (
-                                <div key={sub.id} className="submission-row">
-                                  <div>
-                                    <strong>{sub.student_name}</strong>
-                                    {sub.content && <p className="homework-desc">{sub.content}</p>}
-                                    <span className="muted-inline">{sub.submitted_at?.slice(0, 16).replace('T', ' ')}</span>
-                                  </div>
-                                  {sub.has_file && (
-                                    <button type="button" className="download-btn" disabled={isActionPending(`submission:download:${sub.id}`)} aria-busy={isActionPending(`submission:download:${sub.id}`)} onClick={() => handleDownloadSubmission(sub)}>
-                                      {isActionPending(`submission:download:${sub.id}`) ? t.auth.downloading : (sub.filename || t.download)}
-                                    </button>
+                                <article key={sub.id} className="submission-card">
+                                  <header className="submission-card-header">
+                                    <div className="submission-student-mark" aria-hidden="true">
+                                      {(sub.student_name || '?').trim().slice(0, 1).toUpperCase()}
+                                    </div>
+                                    <div className="submission-student">
+                                      <strong>{sub.student_name}</strong>
+                                      <span>{sub.submitted_at?.slice(0, 16).replace('T', ' ')}</span>
+                                    </div>
+                                    <span className="submission-attachment-count">
+                                      {language === 'zh'
+                                        ? `${sub.attachments?.length || (sub.has_file ? 1 : 0)}个附件`
+                                        : `${sub.attachments?.length || (sub.has_file ? 1 : 0)} attachments`}
+                                    </span>
+                                  </header>
+                                  {sub.content && (
+                                    <div className="submission-note">
+                                      <span>{language === 'zh' ? '文字说明' : 'Note'}</span>
+                                      <p>{sub.content}</p>
+                                    </div>
                                   )}
-                                </div>
+                                  {sub.attachments?.length > 0 && (
+                                    <div className="attachment-file-grid submission-attachment-grid">
+                                      {sub.attachments.map(attachment => (
+                                        <AttachmentCard
+                                          key={attachment.id}
+                                          attachment={attachment}
+                                          language={language}
+                                          previewBusy={isActionPending(`submission:attachment:view:${attachment.id}`)}
+                                          downloadBusy={isActionPending(`submission:attachment:download:${attachment.id}`)}
+                                          onPreview={() => handleOpenSubmissionAttachment(sub, attachment, false)}
+                                          onDownload={() => handleOpenSubmissionAttachment(sub, attachment, true)}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+                                  {sub.has_file && !sub.attachments?.length && (
+                                    <div className="submission-legacy-file">
+                                      <button type="button" className="download-btn" disabled={isActionPending(`submission:download:${sub.id}`)} aria-busy={isActionPending(`submission:download:${sub.id}`)} onClick={() => handleDownloadSubmission(sub)}>
+                                        {isActionPending(`submission:download:${sub.id}`) ? t.auth.downloading : (sub.filename || t.download)}
+                                      </button>
+                                    </div>
+                                  )}
+                                </article>
                               ))}
                             </div>
                           )}

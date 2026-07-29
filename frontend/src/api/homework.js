@@ -17,10 +17,14 @@ export async function deleteHomework(homeworkId) {
   return request(`/api/homework/homeworks/${homeworkId}`, { method: 'DELETE' })
 }
 
-export async function submitHomework(homeworkId, { content = '', file = null }) {
+export async function submitHomework(
+  homeworkId,
+  { content = '', files = [], retainedAttachmentIds = [] },
+) {
   const formData = new FormData()
   formData.append('content', content || '')
-  if (file) formData.append('file', file)
+  files.forEach(file => formData.append('files', file))
+  formData.append('retained_attachment_ids', JSON.stringify(retainedAttachmentIds))
   return uploadRequest(`/api/homework/homeworks/${homeworkId}/submit`, formData)
 }
 
@@ -58,4 +62,15 @@ export async function fetchHomeworkAttachmentFile(homeworkId, attachmentId, down
 
 export async function downloadSubmissionFile(submissionId) {
   return fetchBlob(`/api/homework/submissions/${submissionId}/file`)
+}
+
+export async function fetchSubmissionAttachmentFile(
+  submissionId,
+  attachmentId,
+  download = false,
+) {
+  const query = download ? '?download=true' : ''
+  return fetchBlob(
+    `/api/homework/submissions/${submissionId}/attachments/${attachmentId}/file${query}`,
+  )
 }

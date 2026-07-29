@@ -302,4 +302,5 @@ class HomeworkSubmissionResponse(BaseModel):
     file_type: str | None = None
     file_size: int = 0
     has_file: bool = False
+    attachments: list[HomeworkAttachmentResponse] = Field(default_factory=list)
     submitted_at: str | None = None
