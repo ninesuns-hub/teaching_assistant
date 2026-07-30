@@ -133,6 +133,7 @@ def add_message(
     image_path: Optional[str] = None,
     client_message_id: Optional[str] = None,
     in_reply_to_id: Optional[int] = None,
+    commit: bool = True,
 ) -> ChatMessage:
     message = ChatMessage(
         conversation_id=conversation_id,
@@ -150,8 +151,11 @@ def add_message(
         if role == "user" and conversation.title == "新对话":
             title_src = content.strip() or ("[图片]" if image_path else "新对话")
             conversation.title = title_src[:50] + ("..." if len(title_src) > 50 else "")
-    db.commit()
-    db.refresh(message)
+    if commit:
+        db.commit()
+        db.refresh(message)
+    else:
+        db.flush()
     return message
 
 
