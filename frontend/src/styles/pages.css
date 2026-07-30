@@ -623,7 +623,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  align-items: center;
+  align-items: flex-end;
 }
 
 .homework-due-field {
@@ -634,8 +634,52 @@
   font-size: var(--font-size-caption);
 }
 
-.homework-due-field input {
-  min-height: 42px;
+.homework-due-control {
+  position: relative;
+  display: block;
+  width: 262px;
+  max-width: 100%;
+  height: 48px;
+}
+
+.homework-due-control input {
+  height: 48px;
+  min-height: 48px;
+  padding-right: 48px;
+  cursor: pointer;
+}
+
+.homework-due-control input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.homework-calendar-icon {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 22px;
+  height: 22px;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--color-text-primary);
+  pointer-events: none;
+}
+
+.homework-publish-row > .upload-btn,
+.homework-publish-row > .action-btn {
+  height: 48px;
+  min-height: 48px;
+  margin-top: 0;
 }
 
 .homework-selected-files {
@@ -784,6 +828,9 @@
   .homework-publish-row {
     flex-direction: column;
     align-items: stretch;
+  }
+  .homework-due-control {
+    width: 100%;
   }
   .homework-selected-file,
   .homework-attachment-row {
