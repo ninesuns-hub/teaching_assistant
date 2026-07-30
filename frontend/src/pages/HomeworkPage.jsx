@@ -1,5 +1,6 @@
 import FileTypeIcon from '../components/FileTypeIcon'
 import { formatFileSize } from '../utils/fileTypes'
+import { showDateTimePicker } from '../utils/dateTimePicker'
 
 const MAX_SUBMISSION_FILES = 5
 const MAX_SUBMISSION_FILE_SIZE = 20 * 1024 * 1024
@@ -9,6 +10,15 @@ function TrashIcon() {
   return (
     <svg className="button-icon" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" />
+    </svg>
+  )
+}
+
+function CalendarIcon() {
+  return (
+    <svg className="homework-calendar-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 3v3m10-3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v12H4V7a2 2 0 0 1 2-2Z" />
+      <path d="M8 13h2m4 0h2m-8 3h2m4 0h2" />
     </svg>
   )
 }
@@ -151,11 +161,15 @@ export default function HomeworkPage({ model }) {
                     <div className="homework-publish-row">
                       <label className="homework-due-field">
                         <span>{t.auth.homeworkDueLabel}</span>
-                        <input
-                          type="datetime-local"
-                          value={homeworkForm.dueAt}
-                          onChange={e => setHomeworkForm(p => ({ ...p, dueAt: e.target.value }))}
-                        />
+                        <span className="homework-due-control">
+                          <input
+                            type="datetime-local"
+                            value={homeworkForm.dueAt}
+                            onClick={e => showDateTimePicker(e.currentTarget)}
+                            onChange={e => setHomeworkForm(p => ({ ...p, dueAt: e.target.value }))}
+                          />
+                          <CalendarIcon />
+                        </span>
                       </label>
                       <label className="upload-btn soft">
                         {homeworkFiles.length > 0

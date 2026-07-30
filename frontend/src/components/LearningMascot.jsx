@@ -8,7 +8,6 @@ const copy = {
     teacherTitle: '小离的学情笔记', studentTitle: '小离的学习笔记',
     loading: '我正在翻看最近的学习记录...',
     classLoading: '正在后台整理…',
-    background: '报告会在后台继续整理，你可以先关闭这张学习笔记',
     noClass: '先选一个班级吧。这样我才能分清课程，也不会把不同班级的学习记录混在一起。',
     goClass: '去选择班级', start: '开始和我聊聊', continue: '继续和我聊聊',
     generate: '帮我整理学情报告', update: '把报告更新一下', view: '看看上次的报告',
@@ -35,7 +34,6 @@ const copy = {
     teacherTitle: "Xiaoli's class notes", studentTitle: "Xiaoli's learning notes",
     loading: 'Organizing in the background…',
     classLoading: 'Organizing in the background…',
-    background: 'The report will keep running in the background. You can close these notes.',
     noClass: 'Choose a class first so I can keep each course and its learning records separate.',
     goClass: 'Choose a class', start: 'Start a conversation', continue: 'Keep learning with me',
     generate: 'Organize my learning report', update: 'Update my report', view: 'View the last report',
@@ -244,7 +242,6 @@ export default function LearningMascot({ role, activeClass, open, loading, statu
             <button onClick={onClose} aria-label={text.close}>×</button>
           </div>
           {error && <p className="learning-sync-note"><span />{error}</p>}
-          {generating && <p className="learning-background-note">{text.background}</p>}
           {loading ? <div className="learning-assistant-loading"><i /><i /><i /><span>{text.loading}</span></div>
             : !activeClass ? <><div className="learning-assistant-letter"><p>{text.noClass}</p></div><button className="learning-primary-action" onClick={onGoToClasses}>{text.goClass}</button></>
               : role === 'teacher'
