@@ -27,6 +27,12 @@ import {
 } from '../api/homework'
 import { getStoredUser, getToken, setAuth, clearAuth } from '../api/httpClient'
 import { fetchMemorySettings, updateMemorySettings } from '../api/memory'
+import {
+  deletePendingChatAttachment,
+  fetchChatAttachment,
+  fetchChatAttachmentFile,
+  uploadChatAttachments,
+} from '../api/chatAttachments'
 import LearningMascot, { LearningReportDrawer } from '../components/LearningMascot'
 import Topbar from '../components/layout/Topbar'
 import SceneBackdrop from '../components/scenes/SceneBackdrop'
@@ -41,6 +47,7 @@ import AdminUsersPage from '../pages/AdminUsersPage'
 import { EXAMPLE_PROMPT_GROUPS, SCENE_QUOTES, TRANSLATIONS } from '../config/uiContent'
 import { CODE_COOLDOWN_SEC, TONGJI_EMAIL_RE, getBeijingHour, getMaterialCategory, getRemainingCooldown, getSceneByHour, saveCooldown, sortMaterials } from '../utils/appUtils'
 import { createClientMessageId } from '../utils/clientMessageId'
+import { validateChatAttachmentSelection } from '../utils/chatAttachmentValidation'
 import { getPreviewKind } from '../utils/fileTypes'
 
 const SCENE_OPTIONS = [
@@ -147,7 +154,8 @@ function AppController() {
   const [learningGenerationJob, setLearningGenerationJob] = useState(null)
   const [learningGenerationReady, setLearningGenerationReady] = useState(false)
   const [pendingImage, setPendingImage] = useState(null)
-  const imageInputRef = useRef(null)
+  const [pendingDocuments, setPendingDocuments] = useState([])
+  const attachmentInputRef = useRef(null)
   const welcomeRequestRef = useRef({ key: null, controller: null })
   const welcomeCacheRef = useRef(new Map())
   const conversationRequestRef = useRef(0)
@@ -195,6 +203,33 @@ function AppController() {
       })
     }
   }, [])
+
+  useEffect(() => {
+    const activeDocuments = pendingDocuments.filter(
+      item => item.status === 'queued' || item.status === 'running',
+    )
+    if (!activeDocuments.length) return undefined
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      const updates = await Promise.allSettled(
+        activeDocuments.map(item => fetchChatAttachment(item.id)),
+      )
+      if (cancelled) return
+      const byId = new Map()
+      updates.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          byId.set(activeDocuments[index].id, result.value)
+        }
+      })
+      setPendingDocuments(current => current.map(
+        item => byId.get(item.id) || { ...item },
+      ))
+    }, 1500)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [pendingDocuments])
 
   const t = TRANSLATIONS[language]
   const isTeacher = user?.role === 'teacher'
@@ -405,6 +440,7 @@ function AppController() {
         role: m.role,
         content: m.content,
         imagePath: m.image_url || null,
+        attachments: m.attachments || [],
         feedback: m.feedback || null,
       })))
       loadedConversationIdRef.current = id
@@ -1085,6 +1121,9 @@ function AppController() {
         download,
       )
     }
+    if (fileRef.source === 'chat') {
+      return fetchChatAttachmentFile(fileRef.id, download)
+    }
     throw new Error(language === 'zh' ? '无法识别附件来源' : 'Unknown attachment source')
   }
 
@@ -1307,6 +1346,26 @@ function AppController() {
     })
   }
 
+  const handleOpenChatAttachment = async (attachment, download = false) => {
+    const fileRef = {
+      ...attachment,
+      source: 'chat',
+    }
+    if (!download) {
+      openAttachmentPreview(fileRef)
+      return
+    }
+    const actionKey = `chat:attachment:download:${attachment.id}`
+    return runPendingAction(actionKey, async () => {
+      try {
+        const blob = await fetchChatAttachmentFile(attachment.id, true)
+        downloadBlobFile(blob, attachment.filename)
+      } catch (error) {
+        alert(error.message)
+      }
+    })
+  }
+
   const handleMessagesScroll = useCallback(() => {
     const container = messagesListRef.current
     if (!container) return
@@ -1404,25 +1463,90 @@ function AppController() {
     }
   }, [isDragging, dialRotation])
 
-  const handlePickImage = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      alert(language === 'zh' ? '请选择图片文件' : 'Please select an image file')
+  const handlePickAttachment = async (event) => {
+    const selected = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (!selected.length) return
+    const validation = validateChatAttachmentSelection({
+      selected,
+      pendingDocuments,
+      pendingImage,
+    })
+    const validationMessages = {
+      count: {
+        zh: '每条消息最多包含 3 个附件',
+        en: 'A message can contain at most 3 attachments',
+      },
+      image_count: {
+        zh: '每条消息最多上传 1 张图片',
+        en: 'A message can contain at most one image',
+      },
+      image_format_or_size: {
+        zh: '图片须为 JPEG、PNG、WEBP 或 GIF，且不能超过 5MB',
+        en: 'Images must be JPEG, PNG, WEBP, or GIF and no larger than 5 MB',
+      },
+      legacy_document: {
+        zh: '旧版 .doc/.ppt 暂不支持，请另存为 .docx/.pptx 后上传',
+        en: 'Legacy .doc/.ppt files are unsupported; save them as .docx/.pptx first',
+      },
+      document_format_or_size: {
+        zh: '文档须为 PDF、DOCX、PPTX 或 PPSX，且单个不能超过 20MB',
+        en: 'Documents must be PDF, DOCX, PPTX, or PPSX and no larger than 20 MB',
+      },
+      total_size: {
+        zh: '单条消息的全部附件合计不能超过 50MB',
+        en: 'All attachments together cannot exceed 50 MB',
+      },
+    }
+    if (validation.error) {
+      alert(validationMessages[validation.error][language])
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      alert(language === 'zh' ? '图片不能超过 5MB' : 'Image must be under 5MB')
-      return
+    const { imageFiles, documentFiles } = validation
+
+    return runPendingAction('chat:attachment:upload', async () => {
+      try {
+        let nextImage = null
+        if (imageFiles.length) {
+          const file = imageFiles[0]
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(String(reader.result))
+            reader.onerror = () => reject(new Error(
+              language === 'zh' ? '图片读取失败' : 'Unable to read the image',
+            ))
+            reader.readAsDataURL(file)
+          })
+          nextImage = {
+            previewUrl: dataUrl,
+            base64: dataUrl.split(',')[1],
+            mime: file.type,
+            filename: file.name,
+            file_size: file.size,
+          }
+        }
+        let uploadedDocuments = []
+        if (documentFiles.length) {
+          const result = await uploadChatAttachments(documentFiles)
+          uploadedDocuments = result.attachments || []
+        }
+        if (nextImage) setPendingImage(nextImage)
+        if (uploadedDocuments.length) {
+          setPendingDocuments(current => [...current, ...uploadedDocuments])
+        }
+      } catch (error) {
+        alert(error.message)
+      }
+    })
+  }
+
+  const handleRemovePendingDocument = async (attachment) => {
+    setPendingDocuments(current => current.filter(item => item.id !== attachment.id))
+    try {
+      await deletePendingChatAttachment(attachment.id)
+    } catch (error) {
+      alert(error.message)
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result
-      const base64 = String(dataUrl).split(',')[1]
-      setPendingImage({ previewUrl: dataUrl, base64, mime: file.type })
-    }
-    reader.readAsDataURL(file)
-    e.target.value = ''
   }
 
   const handleFeedback = async (messageIndex, feedbackType) => {
@@ -1474,24 +1598,36 @@ function AppController() {
       else if (user.needs_role_selection) setRoleModalOpen(true)
       return
     }
-    if ((!input.trim() && !pendingImage) || isSending) return
+    if (pendingDocuments.some(item => item.status !== 'ready')) return
+    if ((!input.trim() && !pendingImage && !pendingDocuments.length) || isSending) return
 
     return runPendingAction('chat:send', async () => {
     const text = input.trim()
-    const displayText = text || (language === 'zh' ? '[图片]' : '[Image]')
+    const displayText = text || (
+      pendingImage && pendingDocuments.length
+        ? language === 'zh' ? '[图片和文档]' : '[Image and documents]'
+        : pendingImage
+          ? language === 'zh' ? '[图片]' : '[Image]'
+          : language === 'zh' ? '[文档]' : '[Documents]'
+    )
     const userMessage = {
       role: 'user',
       content: displayText,
       imagePreview: pendingImage?.previewUrl || null,
+      attachments: pendingDocuments,
     }
     const imagePayload = pendingImage
       ? { image_base64: pendingImage.base64, image_mime: pendingImage.mime }
       : {}
+    const attachmentPayload = {
+      attachment_ids: pendingDocuments.map(item => item.id),
+    }
 
     shouldAutoScrollRef.current = true
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setPendingImage(null)
+    setPendingDocuments([])
     setIsSending(true)
 
     // 创建一个空的助手消息占位
@@ -1509,6 +1645,7 @@ function AppController() {
         class_id: activeClassId,
         client_message_id: createClientMessageId(),
         ...imagePayload,
+        ...attachmentPayload,
       }, (event) => {
         setMessages(prev => {
           const lastIndex = prev.length - 1
@@ -1555,6 +1692,7 @@ function AppController() {
           role: m.role,
           content: m.content,
           imagePath: m.image_url || null,
+          attachments: m.attachments || [],
           feedback: m.feedback || null,
           memoryContextCount: m.memory_context_count || 0,
         })))
@@ -1621,6 +1759,7 @@ function AppController() {
     handleDownloadSubmission,
     handleOpenHomeworkAttachment,
     handleOpenSubmissionAttachment,
+    handleOpenChatAttachment,
     handleExampleSelect,
     handleFeedback,
     handleJoinClass,
@@ -1630,7 +1769,8 @@ function AppController() {
     handleMouseDown,
     handleSceneSelect,
     handleNewChat,
-    handlePickImage,
+    handlePickAttachment,
+    handleRemovePendingDocument,
     handlePublishHomework,
     handleRefreshExamples,
     handleRenameConversation,
@@ -1649,7 +1789,7 @@ function AppController() {
     homeworkForm,
     homeworks,
     homeworkSubmissions,
-    imageInputRef,
+    attachmentInputRef,
     input,
     isDragging,
     isSending,
@@ -1667,6 +1807,7 @@ function AppController() {
     openMaterialFile,
     onOpenMemory: () => setMemoryPanelOpen(true),
     pendingImage,
+    pendingDocuments,
     quoteOpacity,
     roleModalOpen,
     secondPageTitle,

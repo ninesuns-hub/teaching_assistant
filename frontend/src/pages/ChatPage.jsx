@@ -2,9 +2,54 @@ import MarkdownMessage from '../components/MarkdownMessage'
 import ChatComposer from '../components/chat/ChatComposer'
 import { AuthImage, MessageActionIcon } from '../components/chat/MessageParts'
 import SceneSwitcher from '../components/scenes/SceneSwitcher'
+import FileTypeIcon from '../components/FileTypeIcon'
+import { formatFileSize } from '../utils/fileTypes'
+
+
+const ATTACHMENT_PLACEHOLDERS = new Set([
+  '[图片]',
+  '[Image]',
+  '[文档]',
+  '[Documents]',
+  '[图片和文档]',
+  '[Image and documents]',
+])
+
+
+function ChatAttachmentList({
+  attachments,
+  language,
+  onDownload,
+  onPreview,
+}) {
+  if (!attachments?.length) return null
+  return (
+    <div className="chat-message-attachments">
+      {attachments.map(attachment => (
+        <div className="chat-message-attachment" key={attachment.id}>
+          <FileTypeIcon file={attachment} />
+          <div className="chat-message-attachment-info">
+            <strong title={attachment.filename}>{attachment.filename}</strong>
+            {formatFileSize(attachment.file_size) && (
+              <span>{formatFileSize(attachment.file_size)}</span>
+            )}
+          </div>
+          <div className="chat-message-attachment-actions">
+            <button type="button" onClick={() => onPreview(attachment)}>
+              {language === 'zh' ? '预览' : 'Preview'}
+            </button>
+            <button type="button" onClick={() => onDownload(attachment)}>
+              {language === 'zh' ? '下载' : 'Download'}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function ChatPage({ model }) {
-  const { SCENE_OPTIONS, activeQuote, activeSceneKey, canChat, chatOpacity, chatPlaceholder, composerInputRef, conversationId, conversationLoading, dialRotation, handleAssistantContentUpdate, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMessagesScroll, handleMouseDown, handlePickImage, handleRefreshExamples, handleSceneSelect, handleSend, imageInputRef, input, isDragging, isSending, language, messages, messagesEndRef, messagesListRef, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
+  const { SCENE_OPTIONS, activeQuote, activeSceneKey, attachmentInputRef, canChat, chatOpacity, chatPlaceholder, composerInputRef, conversationId, conversationLoading, dialRotation, handleAssistantContentUpdate, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMessagesScroll, handleMouseDown, handleOpenChatAttachment, handlePickAttachment, handleRefreshExamples, handleRemovePendingDocument, handleSceneSelect, handleSend, input, isActionPending, isDragging, isSending, language, messages, messagesEndRef, messagesListRef, pendingDocuments, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
   const statusLabels = {
     understanding: t.chatUnderstanding,
     retrieving: t.chatRetrieving,
@@ -23,11 +68,15 @@ export default function ChatPage({ model }) {
       : chatPlaceholder,
     composerInputRef,
     handleKeyDown,
-    handlePickImage,
+    handlePickAttachment,
+    handleRemovePendingDocument,
     handleSend,
-    imageInputRef,
+    attachmentInputRef,
     input,
+    isAttachmentUploading: isActionPending('chat:attachment:upload'),
     isSending,
+    language,
+    pendingDocuments,
     pendingImage,
     setInput,
     setPendingImage,
@@ -94,7 +143,13 @@ export default function ChatPage({ model }) {
                     {(message.imagePreview || message.imagePath) && (
                       <AuthImage path={message.imagePath} previewUrl={message.imagePreview} />
                     )}
-                    {message.content && message.content !== '[图片]' && message.content !== '[Image]' && (
+                    <ChatAttachmentList
+                      attachments={message.attachments}
+                      language={language}
+                      onPreview={attachment => handleOpenChatAttachment(attachment, false)}
+                      onDownload={attachment => handleOpenChatAttachment(attachment, true)}
+                    />
+                    {message.content && !ATTACHMENT_PLACEHOLDERS.has(message.content) && (
                       message.role === 'assistant' ? (
                         <MarkdownMessage
                           content={message.content}
@@ -106,7 +161,9 @@ export default function ChatPage({ model }) {
                         />
                       ) : <p className="message-text">{message.content}</p>
                     )}
-                    {message.content && (message.content === '[图片]' || message.content === '[Image]') && !(message.imagePreview || message.imagePath) && (
+                    {message.content && ATTACHMENT_PLACEHOLDERS.has(message.content)
+                      && !(message.imagePreview || message.imagePath)
+                      && !message.attachments?.length && (
                       <p className="message-text">{message.content}</p>
                     )}
                     {message.role === 'assistant' && !message.content && (
