@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Enum, ForeignKey, BigInteger, UniqueConstraint, Boolean, Float, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Enum, ForeignKey, BigInteger, UniqueConstraint, Boolean, Float, JSON, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.declarative import declarative_base
@@ -288,6 +288,48 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     conversation = relationship("Conversation", back_populates="messages")
+    attachments = relationship(
+        "ChatMessageAttachment",
+        back_populates="message",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class ChatMessageAttachment(Base):
+    __tablename__ = "chat_message_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        nullable=False,
+        index=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id = Column(
+        Integer,
+        ForeignKey("chat_messages.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_type = Column(String(20), nullable=False)
+    mime_type = Column(String(150), nullable=False)
+    file_size = Column(BigInteger, nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="queued", index=True)
+    progress_current = Column(Integer, nullable=False, default=0)
+    progress_total = Column(Integer, nullable=False, default=0)
+    extracted_content = Column(JSON, nullable=True)
+    extraction_truncated = Column(Boolean, nullable=False, default=False)
+    requires_ocr = Column(Boolean, nullable=False, default=False, index=True)
+    error_message = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    message = relationship("ChatMessage", back_populates="attachments")
 
 
 class ConversationSummary(Base):

@@ -25,7 +25,7 @@ from .schemas import (
 from agent_core import ReactAgent
 from database.course_repo import query_course_admin, init_db
 from database.mysql_db import get_db, User, UserRole
-from database import conversation_repo, rag_repo
+from database import chat_attachment_repo, conversation_repo, rag_repo
 from agent_core.config.settings import settings
 from app.core.data_manager import data_manager
 from app.core.chat_image_store import save_chat_image, resolve_image_path
@@ -36,9 +36,14 @@ from app.core.mermaid_service import (
 )
 from app.services.learning_jobs import recover_incomplete_learning_jobs
 from app.services.context_service import build_chat_context
+from app.services.chat_attachment_context import build_document_reference
 from app.services.memory_jobs import (
     enqueue_after_answer,
     recover_incomplete_memory_jobs,
+)
+from app.services.chat_attachment_service import (
+    cleanup_expired_chat_attachments,
+    recover_incomplete_chat_attachments,
 )
 from app.core.agent_bindings import build_agent_tools
 from app.core.deps import get_current_user, require_role
@@ -50,6 +55,7 @@ from .homework_routes import router as homework_router
 from .memory_routes import router as memory_router
 from .health_routes import router as health_router
 from .admin_routes import router as admin_router
+from .chat_attachment_routes import router as chat_attachment_router
 
 hybrid_searcher = data_manager.searcher
 logger = logging.getLogger(__name__)
@@ -63,10 +69,17 @@ router.include_router(homework_router, prefix="/homework", tags=["homework"])
 router.include_router(memory_router, tags=["memory"])
 router.include_router(health_router, tags=["health"])
 router.include_router(admin_router, prefix="/admin", tags=["admin"])
+router.include_router(
+    chat_attachment_router,
+    prefix="/chat/attachments",
+    tags=["chat-attachments"],
+)
 
 init_db()
 recover_incomplete_learning_jobs()
 recover_incomplete_memory_jobs()
+recover_incomplete_chat_attachments()
+cleanup_expired_chat_attachments()
 
 agent = ReactAgent(
     config=settings,
@@ -78,8 +91,19 @@ agent = ReactAgent(
 )
 
 
-def _build_agent_input(message: str, image_path: Optional[str]) -> str:
-    text = message.strip() or "请帮我分析这张图片中的离散数学问题。"
+def _build_agent_input(
+    message: str,
+    image_path: Optional[str],
+    has_documents: bool = False,
+) -> str:
+    if message.strip():
+        text = message.strip()
+    elif image_path:
+        text = "请帮我分析这张图片中的离散数学问题。"
+    elif has_documents:
+        text = "请概括并分析我上传的文档内容。"
+    else:
+        text = ""
     if image_path:
         return (
             f"{text}\n\n"
@@ -316,6 +340,7 @@ def chat(
         raise HTTPException(status_code=403, detail="无权使用该班级知识库")
 
     client_message_id = str(request.client_message_id) if request.client_message_id else None
+    requested_attachment_ids = [str(item) for item in request.attachment_ids]
     existing_user_message = None
     if client_message_id:
         existing_user_message = conversation_repo.get_message_by_client_id(
@@ -341,6 +366,26 @@ def chat(
                     },
                 )
 
+    requested_attachments = chat_attachment_repo.list_owned_for_send(
+        db,
+        requested_attachment_ids,
+        current_user.id,
+    )
+    if len(requested_attachments) != len(requested_attachment_ids):
+        raise HTTPException(status_code=404, detail="一个或多个会话附件不存在")
+    if existing_user_message is None:
+        for attachment in requested_attachments:
+            if attachment.status != "ready":
+                raise HTTPException(status_code=409, detail=f"{attachment.filename} 尚未解析完成")
+            if attachment.message_id is not None:
+                raise HTTPException(status_code=409, detail=f"{attachment.filename} 已用于其他消息")
+    elif requested_attachment_ids:
+        existing_attachments = chat_attachment_repo.list_for_message_ids(
+            db, [existing_user_message.id]
+        ).get(existing_user_message.id, [])
+        if {item.public_id for item in existing_attachments} != set(requested_attachment_ids):
+            raise HTTPException(status_code=409, detail="重试请求的附件与原消息不一致")
+
     request_id = str(uuid.uuid4())
     if not conversation_repo.acquire_generation_lock(db, conversation.id, request_id):
         raise HTTPException(status_code=409, detail="当前会话正在生成回答，请稍后再试")
@@ -362,16 +407,48 @@ def chat(
         if existing_user_message is not None
         else request.message
     )
-    display_message = effective_message.strip() or "[图片]"
+    if effective_message in {
+        "[图片]",
+        "[Image]",
+        "[文档]",
+        "[Documents]",
+        "[图片和文档]",
+        "[Image and documents]",
+    }:
+        effective_message = ""
+    has_documents = bool(requested_attachments)
+    if effective_message.strip():
+        display_message = effective_message.strip()
+    elif image_path and has_documents:
+        display_message = "[图片和文档]"
+    elif image_path:
+        display_message = "[图片]"
+    else:
+        display_message = "[文档]"
     try:
-        user_message = existing_user_message or conversation_repo.add_message(
-            db,
-            conversation.id,
-            "user",
-            display_message,
-            image_path=image_path,
-            client_message_id=client_message_id,
-        )
+        if existing_user_message is not None:
+            user_message = existing_user_message
+            attached_documents = chat_attachment_repo.list_for_message_ids(
+                db, [user_message.id]
+            ).get(user_message.id, [])
+            has_documents = bool(attached_documents)
+        else:
+            user_message = conversation_repo.add_message(
+                db,
+                conversation.id,
+                "user",
+                display_message,
+                image_path=image_path,
+                client_message_id=client_message_id,
+                commit=False,
+            )
+            chat_attachment_repo.attach_to_message(
+                db,
+                requested_attachments,
+                user_message.id,
+            )
+            db.commit()
+            db.refresh(user_message)
         built_context = build_chat_context(
             db,
             user_id=current_user.id,
@@ -381,7 +458,19 @@ def chat(
             request_id=request_id,
             question=effective_message or display_message,
         )
+        document_reference = build_document_reference(
+            db,
+            conversation_id=conversation.id,
+            question=effective_message or display_message,
+            current_message_id=user_message.id,
+        )
+        if document_reference:
+            built_context.history_messages.append({
+                "role": "user",
+                "content": document_reference,
+            })
     except Exception:
+        db.rollback()
         conversation_repo.release_generation_lock(db, conversation.id, request_id)
         raise
 
@@ -399,7 +488,11 @@ def chat(
     available_image_path = image_path or built_context.recent_image_path
     if available_image_path:
         request_context["image_path"] = available_image_path
-    agent_input = _build_agent_input(effective_message, image_path)
+    agent_input = _build_agent_input(
+        effective_message,
+        image_path,
+        has_documents=has_documents,
+    )
 
     try:
         return StreamingResponse(

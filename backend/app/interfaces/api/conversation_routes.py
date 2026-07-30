@@ -4,9 +4,13 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
 from database.mysql_db import get_db, User
-from database import conversation_repo, memory_vector_repo
+from database import chat_attachment_repo, conversation_repo, memory_vector_repo
 from app.core.deps import get_current_user
 from app.core.chat_image_store import image_url_for_path
+from app.services.chat_attachment_service import (
+    delete_attachment_file,
+    serialize_attachment,
+)
 from .schemas import ConversationResponse, ChatMessageResponse, ChatRequest, MessageFeedbackRequest, RenameConversationRequest
 
 router = APIRouter()
@@ -64,12 +68,19 @@ def get_conversation_messages(
     if not conversation:
         raise HTTPException(status_code=404, detail="会话不存在")
     messages = conversation_repo.list_messages(db, conversation.id)
+    attachments_by_message = chat_attachment_repo.list_for_message_ids(
+        db, [message.id for message in messages]
+    )
     return [
         ChatMessageResponse(
             id=m.id,
             role=m.role,
             content=m.content,
             image_url=image_url_for_path(m.image_path),
+            attachments=[
+                serialize_attachment(item)
+                for item in attachments_by_message.get(m.id, [])
+            ],
             feedback=m.feedback_type,
             memory_context_count=_memory_context_count(m.retrieved_context)
             if m.role == "assistant" else 0,
@@ -126,6 +137,14 @@ def delete_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    conversation = conversation_repo.get_conversation(
+        db, public_id, current_user.id
+    )
+    attachment_paths = (
+        chat_attachment_repo.list_paths_for_conversation(db, conversation.id)
+        if conversation
+        else []
+    )
     deleted, memory_ids = conversation_repo.delete_conversation(
         db, public_id, current_user.id
     )
@@ -136,4 +155,6 @@ def delete_conversation(
             memory_vector_repo.delete_memory(memory_id)
         except Exception:
             pass
+    for path in attachment_paths:
+        delete_attachment_file(path)
     return {"ok": True}

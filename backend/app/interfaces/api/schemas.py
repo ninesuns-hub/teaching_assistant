@@ -10,11 +10,14 @@ class ChatRequest(BaseModel):
     image_base64: str | None = None
     image_mime: str | None = None
     client_message_id: UUID | None = None
+    attachment_ids: list[UUID] = Field(default_factory=list, max_length=3)
 
     @model_validator(mode="after")
     def require_message_or_image(self):
-        if not self.message.strip() and not self.image_base64:
-            raise ValueError("请输入文字或上传图片")
+        if not self.message.strip() and not self.image_base64 and not self.attachment_ids:
+            raise ValueError("请输入文字或上传附件")
+        if len(self.attachment_ids) + (1 if self.image_base64 else 0) > 3:
+            raise ValueError("每条消息最多包含 3 个附件")
         return self
 
 
@@ -175,11 +178,27 @@ class RenameConversationRequest(BaseModel):
         return title
 
 
+class ChatAttachmentResponse(BaseModel):
+    id: str
+    filename: str
+    file_type: str
+    mime_type: str
+    file_size: int
+    status: str
+    progress_current: int = 0
+    progress_total: int = 0
+    truncated: bool = False
+    requires_ocr: bool = False
+    error_message: str | None = None
+    created_at: str | None = None
+
+
 class ChatMessageResponse(BaseModel):
     id: int
     role: str
     content: str
     image_url: str | None = None
+    attachments: list[ChatAttachmentResponse] = Field(default_factory=list)
     feedback: str | None = None
     memory_context_count: int = 0
     created_at: str
