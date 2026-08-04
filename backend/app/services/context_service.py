@@ -60,7 +60,16 @@ def build_chat_context(
         return result
 
     summary = conversation_repo.get_conversation_summary(db, conversation_id)
-    if settings.CONVERSATION_SUMMARY_ENABLED and summary:
+    if (
+        settings.CONVERSATION_SUMMARY_ENABLED
+        and summary
+        and conversation_repo.is_message_in_ancestry(
+            db,
+            conversation_id,
+            before_message_id,
+            summary.summarized_through_message_id,
+        )
+    ):
         result.summary_text = _trim_text(
             summary.summary_text or "",
             settings.CHAT_SUMMARY_TOKEN_LIMIT,

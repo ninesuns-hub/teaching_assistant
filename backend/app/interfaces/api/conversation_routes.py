@@ -68,6 +68,7 @@ def get_conversation_messages(
     if not conversation:
         raise HTTPException(status_code=404, detail="会话不存在")
     messages = conversation_repo.list_messages(db, conversation.id)
+    variant_metadata = conversation_repo.answer_variant_metadata(db, messages)
     attachments_by_message = chat_attachment_repo.list_for_message_ids(
         db, [message.id for message in messages]
     )
@@ -84,10 +85,33 @@ def get_conversation_messages(
             feedback=m.feedback_type,
             memory_context_count=_memory_context_count(m.retrieved_context)
             if m.role == "assistant" else 0,
+            **variant_metadata.get(m.id, {"can_retry": False}),
             created_at=m.created_at.isoformat(),
         )
         for m in messages
     ]
+
+
+@router.post("/{public_id}/messages/{message_id}/activate")
+def activate_answer_variant(
+    public_id: str,
+    message_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    conversation = conversation_repo.get_conversation(db, public_id, current_user.id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    message = conversation_repo.get_message(db, conversation.id, message_id)
+    if not message or message.role != "assistant" or message.in_reply_to_id is None:
+        raise HTTPException(status_code=404, detail="回答版本不存在")
+    leaf_id = conversation_repo.newest_descendant_leaf(
+        db,
+        conversation.id,
+        message.id,
+    )
+    conversation_repo.set_active_leaf(db, conversation.id, leaf_id)
+    return {"ok": True, "active_leaf_message_id": leaf_id}
 
 
 @router.post("/{public_id}/messages/{message_id}/feedback")

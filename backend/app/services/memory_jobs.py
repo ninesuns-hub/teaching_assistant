@@ -57,13 +57,12 @@ def enqueue_after_answer(
     user_id: int,
     conversation_id: int,
     assistant_message_id: int,
+    include_memory: bool = True,
 ) -> None:
     db = SessionLocal()
     try:
         if settings.CONVERSATION_SUMMARY_ENABLED:
-            count = db.query(ChatMessage).filter(
-                ChatMessage.conversation_id == conversation_id
-            ).count()
+            count = len(conversation_repo.list_messages(db, conversation_id, limit=10000))
             if count > settings.CHAT_RECENT_MESSAGE_LIMIT:
                 job = memory_repo.enqueue_job(
                     db,
@@ -74,7 +73,7 @@ def enqueue_after_answer(
                 )
                 if job.status == "queued":
                     submit_job(job.id)
-        if settings.MEMORY_WRITE_ENABLED:
+        if settings.MEMORY_WRITE_ENABLED and include_memory:
             setting = memory_repo.get_or_create_setting(db, user_id)
             if setting.enabled:
                 job = memory_repo.enqueue_job(
@@ -146,21 +145,18 @@ def _conversation_text(messages: list[ChatMessage], max_chars: int = 40000) -> s
 
 def _run_summary(db, job: MemoryJob) -> None:
     summary = conversation_repo.get_conversation_summary(db, job.conversation_id)
-    through = summary.summarized_through_message_id if summary else 0
-    messages = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.conversation_id == job.conversation_id,
-            ChatMessage.id > (through or 0),
-        )
-        .order_by(ChatMessage.id.asc())
-        .limit(50)
-        .all()
-    )
+    active_messages = conversation_repo.list_messages(db, job.conversation_id, limit=10000)
+    through = summary.summarized_through_message_id if summary else None
+    active_ids = [message.id for message in active_messages]
+    if through in active_ids:
+        messages = active_messages[active_ids.index(through) + 1:][:50]
+        previous = summary.summary_text if summary else ""
+    else:
+        messages = active_messages[:50]
+        previous = ""
     if len(messages) <= settings.CHAT_RECENT_MESSAGE_LIMIT:
         return
     to_summarize = messages[:-settings.CHAT_RECENT_MESSAGE_LIMIT]
-    previous = summary.summary_text if summary else ""
     data = _complete_json(
         """Summarize the older portion of a discrete-math tutoring conversation.
 Preserve topic, referents, established facts, examples, temporary user preferences,

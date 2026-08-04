@@ -8,7 +8,7 @@ from rank_bm25 import BM25Okapi
 from sqlalchemy.orm import Session
 
 from agent_core.config.settings import settings
-from database import chat_attachment_repo
+from database import chat_attachment_repo, conversation_repo
 
 
 SUMMARY_TERMS = (
@@ -106,9 +106,20 @@ def build_document_reference(
     question: str,
     current_message_id: int | None = None,
 ) -> str:
-    attachments = chat_attachment_repo.list_ready_for_conversation(
-        db, conversation_id
+    active_messages = (
+        conversation_repo.message_path(db, conversation_id, current_message_id)
+        if current_message_id is not None
+        else conversation_repo.list_messages(db, conversation_id, limit=10000)
     )
+    attachments_by_message = chat_attachment_repo.list_for_message_ids(
+        db, [message.id for message in active_messages]
+    )
+    attachments = [
+        attachment
+        for message in active_messages
+        for attachment in attachments_by_message.get(message.id, [])
+        if attachment.status == "ready"
+    ]
     candidates = _candidate_chunks(attachments)
     if not candidates:
         return ""
