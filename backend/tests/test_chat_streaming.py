@@ -108,6 +108,45 @@ class AnswerStreamExtractorTests(unittest.TestCase):
         self.assertEqual(first_content, {"type": "content", "delta": "第一个片段"})
         self.assertFalse(state["upstream_resumed"])
 
+    def test_empty_llm_stream_is_retried_without_consuming_agent_iteration(self):
+        config = SimpleNamespace(
+            CHAT_API_KEY="test",
+            CHAT_BASE_URL="https://example.invalid",
+            CHAT_MODEL_NAME="test-model",
+            MAX_TOKENS=256,
+            SYSTEM_PROMPT="system",
+        )
+        agent = ReactAgent(config, [])
+        responses = iter([[], [], ["<answer>Recovered</answer>"]])
+        calls = []
+
+        def upstream(_prompt):
+            calls.append(True)
+            return iter(next(responses))
+
+        agent._call_llm_stream = upstream
+        with patch("agent_core.react_agent.time.sleep"):
+            events = list(agent.stream_events("question", {"request_id": "empty-retry"}))
+        content = "".join(event.get("delta", "") for event in events if event["type"] == "content")
+        self.assertEqual(content, "Recovered")
+        self.assertEqual(len(calls), 3)
+
+    def test_repeated_empty_stream_returns_retryable_error(self):
+        config = SimpleNamespace(
+            CHAT_API_KEY="test",
+            CHAT_BASE_URL="https://example.invalid",
+            CHAT_MODEL_NAME="test-model",
+            MAX_TOKENS=256,
+            SYSTEM_PROMPT="system",
+        )
+        agent = ReactAgent(config, [])
+        agent._call_llm_stream = lambda _prompt: iter([])
+        with patch("agent_core.react_agent.time.sleep"):
+            events = list(agent.stream_events("question", {"request_id": "empty-failure"}))
+        errors = [event for event in events if event["type"] == "error"]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("没有生成有效回答", errors[0]["message"])
+
 
 class ProactiveVisualizationTests(unittest.TestCase):
     def test_balanced_visualization_policy(self):

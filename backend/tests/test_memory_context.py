@@ -2,11 +2,14 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from agent_core.react_agent import ReactAgent
 from app.services.context_service import build_chat_context
+from app.interfaces.api.conversation_routes import activate_answer_variant
+from app.interfaces.api.routes import retry_chat_answer
 from database import conversation_repo, memory_repo
 from database.mysql_db import (
     Base,
@@ -87,6 +90,104 @@ class MemoryContextTests(unittest.TestCase):
         ])
         self.assertEqual(context.recent_image_path, "1/graph.png")
         self.assertNotIn("What about this?", [item["content"] for item in context.history_messages])
+
+    def test_answer_variants_keep_separate_descendant_branches(self):
+        question = conversation_repo.add_message(self.db, 1, "user", "What is a tree?")
+        original = conversation_repo.add_message(
+            self.db, 1, "assistant", "Original answer", in_reply_to_id=question.id
+        )
+        follow_up = conversation_repo.add_message(self.db, 1, "user", "Give an example")
+        follow_up_answer = conversation_repo.add_message(
+            self.db, 1, "assistant", "Example answer", in_reply_to_id=follow_up.id
+        )
+        retry = conversation_repo.add_message(
+            self.db, 1, "assistant", "Retry answer", in_reply_to_id=question.id
+        )
+
+        self.assertEqual(
+            [message.id for message in conversation_repo.list_messages(self.db, 1)],
+            [question.id, retry.id],
+        )
+        variants = conversation_repo.answer_variant_metadata(self.db, [retry])
+        self.assertEqual(variants[retry.id]["variant_index"], 2)
+        self.assertEqual(variants[retry.id]["variant_count"], 2)
+        self.assertEqual(variants[retry.id]["previous_variant_id"], original.id)
+
+        original_leaf = conversation_repo.newest_descendant_leaf(self.db, 1, original.id)
+        self.assertEqual(original_leaf, follow_up_answer.id)
+        conversation_repo.set_active_leaf(self.db, 1, original_leaf)
+        self.assertEqual(
+            [message.id for message in conversation_repo.list_messages(self.db, 1)],
+            [question.id, original.id, follow_up.id, follow_up_answer.id],
+        )
+
+    def test_context_never_includes_sibling_answer_variant(self):
+        question = conversation_repo.add_message(self.db, 1, "user", "Define a graph")
+        original = conversation_repo.add_message(
+            self.db, 1, "assistant", "First definition", in_reply_to_id=question.id
+        )
+        retry = conversation_repo.add_message(
+            self.db, 1, "assistant", "Better definition", in_reply_to_id=question.id
+        )
+        follow_up = conversation_repo.add_message(self.db, 1, "user", "Give an example")
+        with patch("app.services.context_service.settings.MEMORY_READ_ENABLED", False):
+            context = build_chat_context(
+                self.db,
+                user_id=1,
+                conversation_id=1,
+                class_id=None,
+                before_message_id=follow_up.id,
+                request_id="branch-context",
+                question=follow_up.content,
+            )
+        self.assertEqual(
+            [item["content"] for item in context.history_messages],
+            ["Define a graph", "Better definition"],
+        )
+        self.assertNotIn(original.content, [item["content"] for item in context.history_messages])
+        self.assertEqual(retry.id, follow_up.in_reply_to_id)
+
+    def test_retry_enforces_five_version_limit(self):
+        question = conversation_repo.add_message(self.db, 1, "user", "Question")
+        variants = [
+            conversation_repo.add_message(
+                self.db,
+                1,
+                "assistant",
+                f"Answer {index}",
+                in_reply_to_id=question.id,
+            )
+            for index in range(5)
+        ]
+        with self.assertRaises(HTTPException) as raised:
+            retry_chat_answer(
+                self.conversation.public_id,
+                variants[-1].id,
+                current_user=self.user,
+                db=self.db,
+            )
+        self.assertEqual(raised.exception.status_code, 409)
+
+    def test_activate_variant_restores_its_newest_descendant(self):
+        question = conversation_repo.add_message(self.db, 1, "user", "Question")
+        original = conversation_repo.add_message(
+            self.db, 1, "assistant", "Original", in_reply_to_id=question.id
+        )
+        follow_up = conversation_repo.add_message(self.db, 1, "user", "Follow up")
+        descendant = conversation_repo.add_message(
+            self.db, 1, "assistant", "Descendant", in_reply_to_id=follow_up.id
+        )
+        conversation_repo.add_message(
+            self.db, 1, "assistant", "Retry", in_reply_to_id=question.id
+        )
+
+        result = activate_answer_variant(
+            self.conversation.public_id,
+            original.id,
+            current_user=self.user,
+            db=self.db,
+        )
+        self.assertEqual(result["active_leaf_message_id"], descendant.id)
 
     def test_memory_is_off_by_default(self):
         setting = memory_repo.get_or_create_setting(self.db, 1)
