@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { sendChatMessage, sendWelcomeMessage } from '../api/chat'
+import { retryChatAnswer, sendChatMessage, sendWelcomeMessage } from '../api/chat'
 import { sendCode, register, login, selectRole, getMe } from '../api/auth'
 import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, deleteClassMaterial, fetchMaterialFile, fetchMaterialPreview } from '../api/classes'
-import { fetchConversations, fetchConversationMessages, deleteConversation, renameConversation, submitConversationFeedback } from '../api/conversations'
+import { activateAnswerVariant, fetchConversations, fetchConversationMessages, deleteConversation, renameConversation, submitConversationFeedback } from '../api/conversations'
 import {
   fetchClassStudents,
   addClassStudent,
@@ -59,6 +59,23 @@ const SCENE_OPTIONS = [
 const CHAT_PATH_PATTERN = /^\/chat(?:\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}))?$/
 const LAST_CHAT_PATH_PREFIX = 'assistant-agent:last-chat:'
 const WELCOME_CACHE_PREFIX = 'assistant-agent:welcome:'
+
+function mapConversationMessage(message) {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    imagePath: message.image_url || null,
+    attachments: message.attachments || [],
+    feedback: message.feedback || null,
+    memoryContextCount: message.memory_context_count || 0,
+    variantIndex: message.variant_index || 1,
+    variantCount: message.variant_count || 1,
+    previousVariantId: message.previous_variant_id || null,
+    nextVariantId: message.next_variant_id || null,
+    canRetry: Boolean(message.can_retry),
+  }
+}
 
 function normalizeChatPath(path) {
   const match = CHAT_PATH_PATTERN.exec(path || '')
@@ -435,14 +452,7 @@ function AppController() {
     try {
       const msgs = await fetchConversationMessages(id)
       if (conversationRequestRef.current !== requestId) return false
-      setMessages(msgs.map(m => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        imagePath: m.image_url || null,
-        attachments: m.attachments || [],
-        feedback: m.feedback || null,
-      })))
+      setMessages(msgs.map(mapConversationMessage))
       loadedConversationIdRef.current = id
       return true
     } catch (err) {
@@ -1560,6 +1570,87 @@ function AppController() {
     }
   }
 
+  const refreshConversationMessages = useCallback(async (targetConversationId) => {
+    const persistedMessages = await fetchConversationMessages(targetConversationId)
+    setMessages(persistedMessages.map(mapConversationMessage))
+  }, [])
+
+  const handleRetryAnswer = async (messageIndex) => {
+    const targetMessage = messages[messageIndex]
+    if (
+      !conversationId
+      || !targetMessage?.id
+      || targetMessage.role !== 'assistant'
+      || !targetMessage.canRetry
+      || isSending
+    ) return
+
+    setIsSending(true)
+    setMessages(current => current.map((message, index) => (
+      index === messageIndex
+        ? { ...message, retrying: true, retryDraft: '', retryError: null }
+        : message
+    )))
+    let streamError = null
+    try {
+      await retryChatAnswer(conversationId, targetMessage.id, (event) => {
+        if (event.type === 'error') {
+          streamError = event.message || (language === 'zh'
+            ? '模型暂时没有生成有效回答，请稍后重试'
+            : 'The model did not generate a valid answer. Please try again later.')
+          return
+        }
+        setMessages(current => current.map((message, index) => {
+          if (index !== messageIndex) return message
+          if (event.type === 'content') {
+            return {
+              ...message,
+              retryDraft: `${message.retryDraft || ''}${event.delta || ''}`,
+            }
+          }
+          if (event.type === 'status' && !message.retryDraft) {
+            return { ...message, retryStatusStage: event.stage }
+          }
+          return message
+        }))
+      })
+      if (streamError) throw new Error(streamError)
+      await refreshConversationMessages(conversationId)
+      await loadConversations()
+    } catch (error) {
+      setMessages(current => current.map((message, index) => (
+        index === messageIndex
+          ? {
+              ...message,
+              retrying: false,
+              retryDraft: null,
+              retryStatusStage: null,
+              retryError: error.message || (language === 'zh' ? '重试失败' : 'Retry failed'),
+            }
+          : message
+      )))
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleActivateAnswerVariant = async (messageId) => {
+    if (!conversationId || !messageId || isSending) return
+    setIsSending(true)
+    try {
+      await activateAnswerVariant(conversationId, messageId)
+      await refreshConversationMessages(conversationId)
+    } catch (error) {
+      setMessages(current => current.map(message => (
+        message.role === 'assistant'
+          ? { ...message, retryError: error.message || (language === 'zh' ? '切换版本失败' : 'Failed to switch version') }
+          : message
+      )))
+    } finally {
+      setIsSending(false)
+    }
+  }
+
   const handleCopyMessage = async (content) => {
     if (!content) return
     try {
@@ -1687,15 +1778,7 @@ function AppController() {
         setConversationId(newConversationId)
         await loadConversations()
         const persistedMessages = await fetchConversationMessages(newConversationId)
-        setMessages(persistedMessages.map(m => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          imagePath: m.image_url || null,
-          attachments: m.attachments || [],
-          feedback: m.feedback || null,
-          memoryContextCount: m.memory_context_count || 0,
-        })))
+        setMessages(persistedMessages.map(mapConversationMessage))
         loadedConversationIdRef.current = newConversationId
         rememberChatPath(`/chat/${newConversationId}`)
         if (location.pathname !== `/chat/${newConversationId}`) {
@@ -1751,6 +1834,7 @@ function AppController() {
     generatingLearning,
     handleAddStudent,
     handleAssistantContentUpdate,
+    handleActivateAnswerVariant,
     handleCopyMessage,
     handleCreateClass,
     handleDeleteHomework,
@@ -1773,6 +1857,7 @@ function AppController() {
     handleRemovePendingDocument,
     handlePublishHomework,
     handleRefreshExamples,
+    handleRetryAnswer,
     handleRenameConversation,
     handleRemoveStudent,
     handleDeleteConversation,
