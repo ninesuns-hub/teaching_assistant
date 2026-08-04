@@ -207,6 +207,7 @@ def _stream_and_persist(
     user_message_id: Optional[int] = None,
     user_id: Optional[int] = None,
     memory_context_count: int = 0,
+    enqueue_memory: bool = True,
 ):
     from database.mysql_db import SessionLocal
 
@@ -255,7 +256,19 @@ def _stream_and_persist(
                     "memory_context_count": memory_context_count,
                 },
                 in_reply_to_id=user_message_id,
+                commit=False,
             )
+            if hasattr(db, "query"):
+                conversation_repo.set_active_leaf(
+                    db,
+                    conversation_id,
+                    assistant_message.id,
+                    commit=False,
+                )
+            if hasattr(db, "commit"):
+                db.commit()
+            if hasattr(db, "refresh"):
+                db.refresh(assistant_message)
         except Exception:
             logger.exception("聊天消息保存失败 request_id=%s", request_id)
             yield _sse("error", {"message": "回答已生成，但保存聊天记录失败"})
@@ -269,6 +282,7 @@ def _stream_and_persist(
                     user_id=user_id,
                     conversation_id=conversation_id,
                     assistant_message_id=assistant_message.id,
+                    include_memory=enqueue_memory,
                 )
             except Exception:
                 logger.exception(
@@ -440,6 +454,7 @@ def chat(
                 display_message,
                 image_path=image_path,
                 client_message_id=client_message_id,
+                in_reply_to_id=conversation.active_leaf_message_id,
                 commit=False,
             )
             chat_attachment_repo.attach_to_message(
@@ -521,6 +536,119 @@ def chat(
     except Exception as e:
         conversation_repo.release_generation_lock(db, conversation.id, request_id)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/conversations/{public_id}/messages/{assistant_message_id}/retry")
+def retry_chat_answer(
+    public_id: str,
+    assistant_message_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    conversation = conversation_repo.get_conversation(db, public_id, current_user.id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    assistant_message = conversation_repo.get_message(
+        db,
+        conversation.id,
+        assistant_message_id,
+    )
+    if (
+        not assistant_message
+        or assistant_message.role != "assistant"
+        or assistant_message.in_reply_to_id is None
+    ):
+        raise HTTPException(status_code=404, detail="回答不存在")
+    user_message = conversation_repo.get_message(
+        db,
+        conversation.id,
+        assistant_message.in_reply_to_id,
+    )
+    if not user_message or user_message.role != "user":
+        raise HTTPException(status_code=409, detail="原问题记录不完整，无法重试")
+    variants = conversation_repo.list_answer_variants(db, user_message.id)
+    if len(variants) >= 5:
+        raise HTTPException(status_code=409, detail="每个问题最多保留5个回答版本")
+
+    request_id = str(uuid.uuid4())
+    if not conversation_repo.acquire_generation_lock(db, conversation.id, request_id):
+        raise HTTPException(status_code=409, detail="当前会话正在生成回答，请稍后再试")
+
+    try:
+        attachments = chat_attachment_repo.list_for_message_ids(
+            db,
+            [user_message.id],
+        ).get(user_message.id, [])
+        question = user_message.content or ""
+        if question in {
+            "[图片]", "[Image]", "[文档]", "[Documents]",
+            "[图片和文档]", "[Image and documents]",
+        }:
+            question = ""
+        built_context = build_chat_context(
+            db,
+            user_id=current_user.id,
+            conversation_id=conversation.id,
+            class_id=conversation.class_id,
+            before_message_id=user_message.id,
+            request_id=request_id,
+            question=question or user_message.content,
+        )
+        document_reference = build_document_reference(
+            db,
+            conversation_id=conversation.id,
+            question=question or user_message.content,
+            current_message_id=user_message.id,
+        )
+        if document_reference:
+            built_context.history_messages.append({
+                "role": "user",
+                "content": document_reference,
+            })
+        request_context = {
+            "user_id": current_user.id,
+            "user_role": current_user.role.value,
+            "class_id": conversation.class_id,
+            "conversation_id": conversation.id,
+            "request_id": request_id,
+            "generation_lock": True,
+            "history_messages": built_context.history_messages,
+            "summary_text": built_context.summary_text,
+            "memories": built_context.memories,
+        }
+        if user_message.image_path or built_context.recent_image_path:
+            request_context["image_path"] = (
+                user_message.image_path or built_context.recent_image_path
+            )
+        agent_input = _build_agent_input(
+            question,
+            user_message.image_path,
+            has_documents=bool(attachments),
+        )
+        return StreamingResponse(
+            _stream_and_persist(
+                user_message.content,
+                agent_input,
+                conversation.id,
+                conversation.public_id,
+                request_context,
+                user_message.image_path,
+                user_message_id=user_message.id,
+                user_id=current_user.id,
+                memory_context_count=len(built_context.memories),
+                enqueue_memory=False,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "X-Conversation-Id": conversation.public_id,
+                "X-Chat-Stream-Protocol": "sse-v1",
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except Exception:
+        conversation_repo.release_generation_lock(db, conversation.id, request_id)
+        raise
 
 
 @router.post("/chat/welcome")

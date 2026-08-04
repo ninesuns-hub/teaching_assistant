@@ -261,11 +261,27 @@ class Conversation(Base):
     public_id = Column(String(36), unique=True, nullable=False, index=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     class_id = Column(Integer, ForeignKey("classes.id"), nullable=True, index=True)
+    active_leaf_message_id = Column(
+        Integer,
+        ForeignKey("chat_messages.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+        index=True,
+    )
     title = Column(String(200), nullable=False, default="新对话")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    messages = relationship("ChatMessage", back_populates="conversation", cascade="all, delete-orphan")
+    messages = relationship(
+        "ChatMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        foreign_keys="ChatMessage.conversation_id",
+    )
+    active_leaf = relationship(
+        "ChatMessage",
+        foreign_keys=[active_leaf_message_id],
+        post_update=True,
+    )
     summary = relationship("ConversationSummary", back_populates="conversation", cascade="all, delete-orphan", uselist=False)
 
 
@@ -287,7 +303,11 @@ class ChatMessage(Base):
     feedback_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    conversation = relationship("Conversation", back_populates="messages")
+    conversation = relationship(
+        "Conversation",
+        back_populates="messages",
+        foreign_keys=[conversation_id],
+    )
     attachments = relationship(
         "ChatMessageAttachment",
         back_populates="message",

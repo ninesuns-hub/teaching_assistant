@@ -201,6 +201,11 @@ class ChatMessageResponse(BaseModel):
     attachments: list[ChatAttachmentResponse] = Field(default_factory=list)
     feedback: str | None = None
     memory_context_count: int = 0
+    variant_index: int = 1
+    variant_count: int = 1
+    previous_variant_id: int | None = None
+    next_variant_id: int | None = None
+    can_retry: bool = False
     created_at: str
 
 

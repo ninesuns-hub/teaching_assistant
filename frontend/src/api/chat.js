@@ -1,6 +1,6 @@
 import { getToken, request } from './httpClient'
 
-async function consumeChatStream(response, onEvent) {
+export async function consumeChatStream(response, onEvent) {
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   const isSseV1 = response.headers.get('X-Chat-Stream-Protocol') === 'sse-v1'
@@ -46,6 +46,29 @@ async function consumeChatStream(response, onEvent) {
   }
   if (buffer.trim()) dispatchFrame(buffer)
   return donePayload
+}
+
+export async function retryChatAnswer(conversationId, messageId, onEvent) {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+  const token = getToken()
+  const response = await fetch(
+    `${API_BASE_URL}/api/conversations/${conversationId}/messages/${messageId}/retry`,
+    {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  )
+  if (!response.ok) {
+    let detail = `Request failed: ${response.status}`
+    try {
+      const data = await response.json()
+      detail = data.detail || data.message || detail
+    } catch {
+      // Keep the status fallback for a non-JSON response.
+    }
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+  }
+  return consumeChatStream(response, onEvent)
 }
 
 export async function sendChatMessage(payload, onEvent) {

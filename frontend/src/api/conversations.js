@@ -30,3 +30,9 @@ export async function submitConversationFeedback(conversationId, messageId, feed
     body: JSON.stringify({ feedback_type: feedbackType }),
   })
 }
+
+export async function activateAnswerVariant(conversationId, messageId) {
+  return request(`/api/conversations/${conversationId}/messages/${messageId}/activate`, {
+    method: 'POST',
+  })
+}

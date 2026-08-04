@@ -278,15 +278,19 @@ def all_user_messages_after(
     after_id: int,
     limit: int = 100,
 ) -> list[ChatMessage]:
-    return (
-        db.query(ChatMessage)
-        .join(Conversation, ChatMessage.conversation_id == Conversation.id)
-        .filter(
-            Conversation.user_id == user_id,
-            ChatMessage.role == "user",
-            ChatMessage.id > after_id,
-        )
-        .order_by(ChatMessage.id.asc())
-        .limit(limit)
+    from database import conversation_repo
+
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.user_id == user_id)
+        .order_by(Conversation.id.asc())
         .all()
     )
+    messages = [
+        message
+        for conversation in conversations
+        for message in conversation_repo.list_messages(db, conversation.id, limit=10000)
+        if message.role == "user" and message.id > after_id
+    ]
+    messages.sort(key=lambda message: message.id)
+    return messages[:limit]

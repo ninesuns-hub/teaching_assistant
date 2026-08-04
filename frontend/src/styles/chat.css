@@ -103,6 +103,64 @@
   align-items: center;
 }
 
+.message-variant-nav {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+}
+
+.message-variant-nav button {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.message-variant-nav button:hover:not(:disabled),
+.message-variant-nav button:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+}
+
+.message-variant-nav button:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.message-variant-nav span {
+  min-width: 38px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-retry-status,
+.message-retry-error {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.message-retry-status {
+  opacity: 0.7;
+}
+
+.message-retry-error {
+  padding: 7px 10px;
+  border: 1px solid rgba(190, 66, 66, 0.35);
+  border-radius: var(--radius-control);
+  background: rgba(190, 66, 66, 0.08);
+  color: #a43a3a;
+}
+
 .message-feedback-status {
   margin-top: 8px;
   padding: 6px 10px;
@@ -196,6 +254,14 @@
   opacity: 1;
   color: var(--color-disabled-text);
   background: var(--color-disabled-bg);
+}
+
+.feedback-btn.is-loading svg {
+  animation: retry-spin 0.9s linear infinite;
+}
+
+@keyframes retry-spin {
+  to { transform: rotate(360deg); }
 }
 
 .thinking-indicator {

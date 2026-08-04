@@ -49,7 +49,7 @@ function ChatAttachmentList({
 }
 
 export default function ChatPage({ model }) {
-  const { SCENE_OPTIONS, activeQuote, activeSceneKey, attachmentInputRef, canChat, chatOpacity, chatPlaceholder, composerInputRef, conversationId, conversationLoading, dialRotation, handleAssistantContentUpdate, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMessagesScroll, handleMouseDown, handleOpenChatAttachment, handlePickAttachment, handleRefreshExamples, handleRemovePendingDocument, handleSceneSelect, handleSend, input, isActionPending, isDragging, isSending, language, messages, messagesEndRef, messagesListRef, pendingDocuments, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
+  const { SCENE_OPTIONS, activeQuote, activeSceneKey, attachmentInputRef, canChat, chatOpacity, chatPlaceholder, composerInputRef, conversationId, conversationLoading, dialRotation, handleActivateAnswerVariant, handleAssistantContentUpdate, handleCopyMessage, handleExampleSelect, handleFeedback, handleKeyDown, handleMessagesScroll, handleMouseDown, handleOpenChatAttachment, handlePickAttachment, handleRefreshExamples, handleRemovePendingDocument, handleRetryAnswer, handleSceneSelect, handleSend, input, isActionPending, isDragging, isSending, language, messages, messagesEndRef, messagesListRef, pendingDocuments, pendingImage, quoteOpacity, setInput, setPendingImage, t, visibleExamplePrompts, welcomeContent, welcomeLoading, welcomeText } = model
   const statusLabels = {
     understanding: t.chatUnderstanding,
     retrieving: t.chatRetrieving,
@@ -149,10 +149,10 @@ export default function ChatPage({ model }) {
                       onPreview={attachment => handleOpenChatAttachment(attachment, false)}
                       onDownload={attachment => handleOpenChatAttachment(attachment, true)}
                     />
-                    {message.content && !ATTACHMENT_PLACEHOLDERS.has(message.content) && (
+                    {(message.retryDraft || message.content) && !ATTACHMENT_PLACEHOLDERS.has(message.retryDraft || message.content) && (
                       message.role === 'assistant' ? (
                         <MarkdownMessage
-                          content={message.content}
+                          content={message.retryDraft || message.content}
                           scene={activeSceneKey}
                           conversationId={conversationId}
                           messageId={message.id}
@@ -184,6 +184,13 @@ export default function ChatPage({ model }) {
                         </button>
                       )}
                       <div className="message-actions">
+                        {message.variantCount > 1 && (
+                          <div className="message-variant-nav" aria-label={language === 'zh' ? '回答版本' : 'Answer versions'}>
+                            <button type="button" disabled={isSending || !message.previousVariantId} onClick={() => handleActivateAnswerVariant(message.previousVariantId)} aria-label={language === 'zh' ? '上一个回答版本' : 'Previous answer version'}>‹</button>
+                            <span>{message.variantIndex} / {message.variantCount}</span>
+                            <button type="button" disabled={isSending || !message.nextVariantId} onClick={() => handleActivateAnswerVariant(message.nextVariantId)} aria-label={language === 'zh' ? '下一个回答版本' : 'Next answer version'}>›</button>
+                          </div>
+                        )}
                         <button type="button" className="feedback-btn" title={t.auth.feedbackCopy} aria-label={t.auth.feedbackCopy} onClick={() => handleCopyMessage(message.content)}>
                           <MessageActionIcon type="copy" />
                         </button>
@@ -193,7 +200,27 @@ export default function ChatPage({ model }) {
                         <button type="button" className={`feedback-btn ${message.feedback === 'negative' ? 'active' : ''}`} title={t.auth.feedbackUnhelpful} aria-label={t.auth.feedbackUnhelpful} aria-pressed={message.feedback === 'negative'} onClick={() => handleFeedback(index, 'negative')}>
                           <MessageActionIcon type="down" />
                         </button>
+                        <button
+                          type="button"
+                          className={`feedback-btn ${message.retrying ? 'is-loading' : ''}`}
+                          title={!message.canRetry
+                            ? language === 'zh' ? '每个问题最多保留5个回答版本' : 'Up to 5 answer versions per question'
+                            : language === 'zh' ? '重新生成回答' : 'Retry answer'}
+                          aria-label={language === 'zh' ? '重新生成回答' : 'Retry answer'}
+                          disabled={isSending || !message.canRetry}
+                          onClick={() => handleRetryAnswer(index)}
+                        >
+                          <MessageActionIcon type="retry" />
+                        </button>
                       </div>
+                      {message.retrying && !message.retryDraft && (
+                        <div className="message-retry-status" role="status">
+                          {statusLabels[message.retryStatusStage] || (language === 'zh' ? '正在重新生成回答…' : 'Regenerating answer…')}
+                        </div>
+                      )}
+                      {message.retryError && (
+                        <div className="message-retry-error" role="alert">{message.retryError}</div>
+                      )}
                       </>
                     )}
                   </div>
