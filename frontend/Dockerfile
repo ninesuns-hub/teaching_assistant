@@ -23,4 +23,9 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# The upstream Alpine entrypoint inspects the packaged nginx manifest before
+# starting. Some hosts can block indefinitely in that inspection, while this
+# image already ships a complete static nginx configuration and needs no
+# entrypoint templating.
+ENTRYPOINT ["nginx"]
+CMD ["-g", "daemon off;"]
