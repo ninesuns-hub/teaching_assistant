@@ -23,8 +23,8 @@
 
 ## 3. 邮箱规范
 
-- **格式**：`^[0-9]{7}@tongji\.edu\.cn$`
-- **示例**：`2131445@tongji.edu.cn`
+- **格式**：`^[^@\s]+@tongji\.edu\.cn$`
+- **示例**：`2131445@tongji.edu.cn`、`teacher.name@tongji.edu.cn`
 - **校验时机**：发送验证码前、注册提交时双重校验
 
 ---

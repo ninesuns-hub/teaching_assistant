@@ -1,6 +1,6 @@
 export const CODE_COOLDOWN_SEC = 60
 const CODE_COOLDOWN_KEY = 'verify_code_cooldown'
-export const TONGJI_EMAIL_RE = /^[0-9]{7}@tongji\.edu\.cn$/
+export const TONGJI_EMAIL_RE = /^[^@\s]+@tongji\.edu\.cn$/
 
 export function getRemainingCooldown(email) {
   try {

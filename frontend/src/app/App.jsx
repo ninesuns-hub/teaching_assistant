@@ -756,7 +756,7 @@ function AppController() {
       return
     }
     if (!TONGJI_EMAIL_RE.test(email)) {
-      setAuthError(language === 'zh' ? '邮箱格式：7位学号@tongji.edu.cn' : 'Email format: 7-digit ID@tongji.edu.cn')
+      setAuthError(language === 'zh' ? '请使用以 @tongji.edu.cn 结尾的同济大学学校邮箱' : 'Please use a Tongji University email ending in @tongji.edu.cn')
       return
     }
 

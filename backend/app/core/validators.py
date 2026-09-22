@@ -1,6 +1,6 @@
 import re
 
-TONGJI_EMAIL_PATTERN = re.compile(r"^[0-9]{7}@tongji\.edu\.cn$")
+TONGJI_EMAIL_PATTERN = re.compile(r"^[^@\s]+@tongji\.edu\.cn$")
 
 
 def is_valid_tongji_email(email: str) -> bool:

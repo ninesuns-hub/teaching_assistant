@@ -40,7 +40,7 @@ def _build_token(user: User) -> Token:
 async def send_code(payload: SendCodeRequest):
     email = payload.email.strip().lower()
     if not is_valid_tongji_email(email):
-        raise HTTPException(status_code=400, detail="请使用同济大学学校邮箱，格式：7位学号@tongji.edu.cn")
+        raise HTTPException(status_code=400, detail="请使用以 @tongji.edu.cn 结尾的同济大学学校邮箱")
 
     if not redis_client.can_send_code(email):
         raise HTTPException(status_code=429, detail="验证码发送过于频繁，请 60 秒后再试")
@@ -56,7 +56,7 @@ async def send_code(payload: SendCodeRequest):
 def register(user_data: UserRegister, db: Session = Depends(get_db)):
     email = user_data.email.strip().lower()
     if not is_valid_tongji_email(email):
-        raise HTTPException(status_code=400, detail="请使用同济大学学校邮箱，格式：7位学号@tongji.edu.cn")
+        raise HTTPException(status_code=400, detail="请使用以 @tongji.edu.cn 结尾的同济大学学校邮箱")
 
     stored_code = redis_client.get_code(email)
     if not stored_code or stored_code != user_data.code.strip():
