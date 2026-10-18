@@ -209,7 +209,7 @@ export default function ChatPage({ model }) {
                         </button>
                         <button
                           type="button"
-                          className={`feedback-btn ${message.retrying ? 'is-loading' : ''}`}
+                          className={`feedback-btn feedback-btn--retry ${message.retrying ? 'is-loading' : ''}`}
                           title={!message.canRetry
                             ? language === 'zh' ? '每个问题最多保留5个回答版本' : 'Up to 5 answer versions per question'
                             : language === 'zh' ? '重新生成回答' : 'Retry answer'}
