@@ -1,4 +1,4 @@
-import { request, uploadRequest, getToken, API_BASE_URL } from './httpClient'
+import { request, uploadRequest, getToken, API_BASE_URL, authenticatedFetch } from './httpClient'
 
 export async function fetchMyClasses() {
   return request('/api/classes/mine')
@@ -38,7 +38,7 @@ export async function fetchMaterialFile(classId, materialId, download = false) {
   const query = download ? '?download=true' : ''
   const url = `${API_BASE_URL}/api/classes/${classId}/materials/${materialId}/file${query}`
   const token = getToken()
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!response.ok) {
@@ -57,7 +57,7 @@ export async function fetchMaterialFile(classId, materialId, download = false) {
 export async function fetchMaterialPreview(classId, materialId) {
   const url = `${API_BASE_URL}/api/classes/${classId}/materials/${materialId}/preview`
   const token = getToken()
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!response.ok) {

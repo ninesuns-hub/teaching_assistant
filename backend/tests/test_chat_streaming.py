@@ -462,8 +462,9 @@ class ChatSseTests(unittest.TestCase):
             persisted,
             [("user", "问题"), ("assistant", "第一段第二段")],
         )
-        self.assertIn("event: status", frames[0])
-        self.assertIn("event: content", frames[1])
+        self.assertIn("event: meta", frames[0])
+        self.assertIn("event: status", frames[1])
+        self.assertIn("event: content", frames[2])
         self.assertIn("event: done", frames[-1])
         done_payload = json.loads(
             next(

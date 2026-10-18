@@ -1,4 +1,4 @@
-import { request, uploadRequest, getToken, API_BASE_URL } from './httpClient'
+import { request, uploadRequest, getToken, API_BASE_URL, authenticatedFetch } from './httpClient'
 
 export async function fetchHomeworks(classId) {
   return request(`/api/homework/classes/${classId}/homeworks`)
@@ -35,7 +35,7 @@ export async function fetchHomeworkSubmissions(homeworkId) {
 async function fetchBlob(path) {
   const url = `${API_BASE_URL}${path}`
   const token = getToken()
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!response.ok) {

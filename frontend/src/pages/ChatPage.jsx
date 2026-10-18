@@ -59,6 +59,7 @@ export default function ChatPage({ model }) {
     organizing: t.chatOrganizing,
     using_tool: t.chatUsingTool,
     generating_visual: t.chatGeneratingVisual,
+    continuing: language === 'zh' ? '正在补全回答…' : 'Completing the answer…',
   }
   const isWelcome = messages.length === 0 && !conversationLoading
   const composerProps = {
@@ -158,6 +159,7 @@ export default function ChatPage({ model }) {
                           messageId={message.id}
                           onContentUpdate={handleAssistantContentUpdate}
                           labels={t}
+                          streaming={Boolean(message.retrying || (isSending && !message.id))}
                         />
                       ) : <p className="message-text">{message.content}</p>
                     )}
@@ -166,7 +168,7 @@ export default function ChatPage({ model }) {
                       && !message.attachments?.length && (
                       <p className="message-text">{message.content}</p>
                     )}
-                    {message.role === 'assistant' && !message.content && (
+                    {message.role === 'assistant' && !message.content && !message.generationError && (
                       <div className="thinking-indicator" aria-live="polite">
                         <span />
                         <span />
@@ -174,6 +176,11 @@ export default function ChatPage({ model }) {
                         <em>{statusLabels[message.statusStage] || t.chatUnderstanding}</em>
                       </div>
                     )}
+                    {message.generationError && <div className="message-retry-error" role="alert">{message.generationError}</div>}
+                    {message.role === 'user' && message.canResume && !isSending && (
+                      <button type="button" className="resume-answer-btn" onClick={event => handleSend(event, message)}>{language === 'zh' ? '重试生成回答' : 'Retry answer'}</button>
+                    )}
+                    {message.role === 'assistant' && message.content && (message.statusStage === 'continuing' || message.retryStatusStage === 'continuing') && <div className="message-retry-status" role="status">{statusLabels.continuing}</div>}
                     {message.role === 'assistant' && message.id && message.content && (
                       <>
                       {message.memoryContextCount > 0 && (

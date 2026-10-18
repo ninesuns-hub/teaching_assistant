@@ -217,19 +217,26 @@ def _stream_and_persist(
     observations: list[str] = []
     generation_failed = False
     try:
+        yield _sse("meta", {"conversation_id": conversation_public_id,
+                            "user_message_id": user_message_id, "request_id": request_id})
         for event in agent.stream_events(agent_input, request_context=request_context):
             if event["type"] == "content":
                 delta = event.get("delta", "")
                 if delta:
                     full_response += delta
                     yield _sse("content", {"delta": delta})
+            elif event["type"] == "replace":
+                full_response = event.get("content", "")
+                yield _sse("replace", {"content": full_response})
             elif event["type"] == "status":
                 yield _sse("status", {"stage": event.get("stage", "understanding")})
             elif event["type"] == "run_state":
                 observations = event.get("observations") or []
             elif event["type"] == "error":
                 generation_failed = True
-                yield _sse("error", {"message": event.get("message", "处理请求时出现错误")})
+                yield _sse("error", {"message": event.get("message", "处理请求时出现错误"),
+                                     "code": event.get("code", "GENERATION_FAILED"),
+                                     "request_id": request_id})
 
         if generation_failed or not full_response.strip():
             return
@@ -462,6 +469,8 @@ def chat(
                 requested_attachments,
                 user_message.id,
             )
+            if hasattr(db, "query"):
+                conversation_repo.set_active_leaf(db, conversation.id, user_message.id, commit=False)
             db.commit()
             db.refresh(user_message)
         built_context = build_chat_context(
@@ -503,6 +512,7 @@ def chat(
     available_image_path = image_path or built_context.recent_image_path
     if available_image_path:
         request_context["image_path"] = available_image_path
+        request_context["image_required"] = bool(image_path)
     agent_input = _build_agent_input(
         effective_message,
         image_path,
@@ -620,6 +630,7 @@ def retry_chat_answer(
             request_context["image_path"] = (
                 user_message.image_path or built_context.recent_image_path
             )
+            request_context["image_required"] = bool(user_message.image_path)
         agent_input = _build_agent_input(
             question,
             user_message.image_path,

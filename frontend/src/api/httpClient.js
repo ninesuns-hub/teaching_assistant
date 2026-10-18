@@ -1,4 +1,4 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+export const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? ''
 export const DEFAULT_REQUEST_TIMEOUT_MS = 12_000
 
 export class ServiceUnavailableError extends Error {
@@ -32,7 +32,7 @@ async function fetchWithTimeout(url, options = {}, defaultTimeoutMs = DEFAULT_RE
   }, timeoutMs)
 
   try {
-    return await fetch(url, { ...fetchOptions, signal: controller.signal })
+    return await authenticatedFetch(url, { ...fetchOptions, signal: controller.signal })
   } catch (error) {
     if (timedOut) throw new RequestTimeoutError()
     if (error instanceof TypeError) throw new ServiceUnavailableError()
@@ -44,22 +44,64 @@ async function fetchWithTimeout(url, options = {}, defaultTimeoutMs = DEFAULT_RE
 }
 
 export function getToken() {
-  return localStorage.getItem('access_token')
+  const token = localStorage.getItem('access_token')
+  if (token && isAuthExpired()) {
+    expireAuth()
+    return null
+  }
+  return token
 }
 
-export function setAuth(token, user) {
+export function setAuth(token, user, session) {
   localStorage.setItem('access_token', token)
   if (user) localStorage.setItem('user', JSON.stringify(user))
+  sessionStorage.removeItem('auth_expired_notice')
+  if (session?.expires_at && session?.idle_expires_at) {
+    localStorage.setItem('auth_session', JSON.stringify({
+      expires_at: session.expires_at, idle_expires_at: session.idle_expires_at,
+    }))
+  }
 }
 
 export function clearAuth() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('user')
+  localStorage.removeItem('auth_session')
 }
 
 export function getStoredUser() {
-  const raw = localStorage.getItem('user')
-  return raw ? JSON.parse(raw) : null
+  if (!getToken()) return null
+  try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
+}
+
+export function isAuthExpired(now = Date.now()) {
+  try {
+    const session = JSON.parse(localStorage.getItem('auth_session') || 'null')
+    if (session && Math.min(session.expires_at, session.idle_expires_at) * 1000 <= now) return true
+    const token = localStorage.getItem('access_token')
+    if (!token) return false
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return !payload.sid || !payload.exp || payload.exp * 1000 <= now
+  } catch { return true }
+}
+
+export function expireAuth() {
+  const hadToken = Boolean(localStorage.getItem('access_token'))
+  clearAuth()
+  if (hadToken) {
+    sessionStorage.setItem('auth_expired_notice', '1')
+    window.dispatchEvent(new Event('auth:expired'))
+  }
+}
+
+export async function authenticatedFetch(url, options = {}) {
+  const token = getToken()
+  const headers = new Headers(options.headers || {})
+  if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`)
+  const response = await fetch(url, { ...options, headers })
+  const isLogin = /\/api\/auth\/(login|register|send-code)(?:\?|$)/.test(String(url))
+  if (response.status === 401 && !isLogin && token === localStorage.getItem('access_token')) expireAuth()
+  return response
 }
 
 export async function request(path, options = {}) {
