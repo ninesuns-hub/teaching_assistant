@@ -13,7 +13,7 @@ from typing import Callable
 
 import fitz
 from docx import Document
-from openai import OpenAI
+from agent_core.vision_client import request_vision, VisionError
 from pptx import Presentation
 from sqlalchemy import inspect
 
@@ -228,41 +228,11 @@ def _ocr_pdf_page(page, filename: str, page_number: int) -> str:
         "保留自然阅读顺序，数学表达尽量使用LaTeX。不要回答或解释文档内容，"
         f"只输出转写结果。文件：{filename}，第{page_number}页。"
     )
-    client = OpenAI(
-        api_key=settings.VISION_API_KEY or settings.EMBED_API_KEY,
-        base_url=settings.VISION_BASE_URL or settings.EMBED_BASE_URL,
-        timeout=90.0,
-    )
-    last_error: Exception | None = None
-    for attempt in range(3):
-        try:
-            response = client.chat.completions.create(
-                model=settings.VISION_MODEL_NAME,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{encoded}",
-                                "detail": "auto",
-                            },
-                        },
-                    ],
-                }],
-                max_tokens=2000,
-                temperature=0,
-            )
-            text = (response.choices[0].message.content or "").strip()
-            if text:
-                return text
-            raise RuntimeError("OCR 返回内容为空")
-        except Exception as exc:
-            last_error = exc
-            if attempt < 2:
-                time.sleep(attempt + 1)
-    raise AttachmentParseError(f"第 {page_number} 页 OCR 失败：{last_error}")
+    try:
+        return request_vision(f"data:image/jpeg;base64,{encoded}", prompt,
+                              request_id=f"ocr-page-{page_number}")
+    except VisionError as exc:
+        raise AttachmentParseError(f"第 {page_number} 页 OCR 失败：{exc}（{exc.code}）") from exc
 
 
 def _extract_pdf(

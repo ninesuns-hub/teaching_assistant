@@ -77,6 +77,9 @@ def get_conversation_messages(
             id=m.id,
             role=m.role,
             content=m.content,
+            client_message_id=m.client_message_id,
+            can_resume=(m.role == "user" and m.id == conversation.active_leaf_message_id
+                        and bool(m.client_message_id) and not conversation_repo.get_reply_for_message(db, m.id)),
             image_url=image_url_for_path(m.image_path),
             attachments=[
                 serialize_attachment(item)

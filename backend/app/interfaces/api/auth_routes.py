@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from database.mysql_db import get_db, User, UserRole
 from .schemas import (
@@ -14,15 +14,21 @@ from app.core.redis_client import redis_client
 from app.core.email_service import send_verification_email, generate_code
 from app.core.validators import is_valid_tongji_email
 from app.core.deps import get_current_user, is_effective_admin
+from app.core.auth_sessions import create_session, read_session, touch_session, delete_session
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 def _build_token(user: User) -> Token:
-    access_token = create_access_token(data={"sub": user.email, "role": user.role.value if user.role else None})
+    session = create_session(user.email)
+    access_token = create_access_token(
+        data={"sub": user.email, "sid": session["sid"], "role": user.role.value if user.role else None},
+        expires_delta=timedelta(seconds=session["expires_at"] - time.time()),
+    )
     return Token(
         access_token=access_token,
         id=user.id,
@@ -33,6 +39,8 @@ def _build_token(user: User) -> Token:
         needs_role_selection=user.role is None,
         is_admin=is_effective_admin(user),
         status=user.status,
+        expires_at=session["expires_at"],
+        idle_expires_at=session["idle_expires_at"],
     )
 
 
@@ -112,7 +120,8 @@ def select_role(
 
 
 @router.get("/me", response_model=UserProfile)
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(request: Request, current_user: User = Depends(get_current_user)):
+    session = read_session(request.state.auth_sid, current_user.email)
     return UserProfile(
         id=current_user.id,
         email=current_user.email,
@@ -121,4 +130,21 @@ def get_me(current_user: User = Depends(get_current_user)):
         needs_role_selection=current_user.role is None,
         is_admin=is_effective_admin(current_user),
         status=current_user.status,
+        expires_at=session["expires_at"],
+        idle_expires_at=session["idle_expires_at"],
     )
+
+
+@router.post("/activity")
+def activity(request: Request, current_user: User = Depends(get_current_user)):
+    try:
+        session = touch_session(request.state.auth_sid)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
+    return {key: session[key] for key in ("expires_at", "idle_expires_at")}
+
+
+@router.post("/logout")
+def logout(request: Request, current_user: User = Depends(get_current_user)):
+    delete_session(request.state.auth_sid)
+    return {"message": "已退出登录"}

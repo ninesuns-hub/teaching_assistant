@@ -207,27 +207,11 @@ class ChatAttachmentServiceTests(unittest.TestCase):
             )
         ocr.assert_not_called()
 
-    def test_ocr_retries_twice_then_returns_text(self):
+    def test_ocr_uses_shared_vision_client(self):
         document = fitz.open()
         page = document.new_page()
-        completions = MagicMock()
-        completions.create.side_effect = [
-            RuntimeError("temporary 1"),
-            RuntimeError("temporary 2"),
-            SimpleNamespace(
-                choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(content="第三次成功")
-                    )
-                ]
-            ),
-        ]
-        client = SimpleNamespace(
-            chat=SimpleNamespace(completions=completions)
-        )
         with (
-            patch.object(chat_attachment_service, "OpenAI", return_value=client),
-            patch.object(chat_attachment_service.time, "sleep"),
+            patch.object(chat_attachment_service, "request_vision", return_value="识别成功") as request,
         ):
             result = chat_attachment_service._ocr_pdf_page(
                 page,
@@ -236,8 +220,9 @@ class ChatAttachmentServiceTests(unittest.TestCase):
             )
         document.close()
 
-        self.assertEqual(result, "第三次成功")
-        self.assertEqual(completions.create.call_count, 3)
+        self.assertEqual(result, "识别成功")
+        request.assert_called_once()
+        self.assertTrue(request.call_args.args[0].startswith('data:image/jpeg;base64,'))
 
     def test_context_search_is_scoped_to_current_conversation(self):
         message = ChatMessage(

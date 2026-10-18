@@ -14,7 +14,7 @@ class ChatRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_message_or_image(self):
-        if not self.message.strip() and not self.image_base64 and not self.attachment_ids:
+        if not self.message.strip() and not self.image_base64 and not self.attachment_ids and not (self.conversation_id and self.client_message_id):
             raise ValueError("请输入文字或上传附件")
         if len(self.attachment_ids) + (1 if self.image_base64 else 0) > 3:
             raise ValueError("每条消息最多包含 3 个附件")
@@ -118,6 +118,8 @@ class Token(BaseModel):
     needs_role_selection: bool = False
     is_admin: bool = False
     status: str = "active"
+    expires_at: int | None = None
+    idle_expires_at: int | None = None
 
 
 class UserProfile(BaseModel):
@@ -128,6 +130,8 @@ class UserProfile(BaseModel):
     needs_role_selection: bool
     is_admin: bool = False
     status: str = "active"
+    expires_at: int | None = None
+    idle_expires_at: int | None = None
 
 
 class CreateClassRequest(BaseModel):
@@ -197,6 +201,8 @@ class ChatMessageResponse(BaseModel):
     id: int
     role: str
     content: str
+    client_message_id: str | None = None
+    can_resume: bool = False
     image_url: str | None = None
     attachments: list[ChatAttachmentResponse] = Field(default_factory=list)
     feedback: str | None = None

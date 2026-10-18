@@ -1,6 +1,8 @@
 import os
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
+from redis.exceptions import RedisError
+from app.core.auth_sessions import read_session
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -22,15 +24,22 @@ def is_effective_admin(user: User) -> bool:
     return user.status == "active" and (bool(user.is_admin) or is_bootstrap_admin(user))
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无法验证凭据", headers={"WWW-Authenticate": "Bearer"})
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
+        sid = payload.get("sid", "")
+        read_session(sid, email)
+        request.state.auth_sid = sid
     except JWTError:
         raise credentials_exception
+    except ValueError:
+        raise credentials_exception
+    except RedisError:
+        raise HTTPException(status_code=503, detail="登录校验服务暂时不可用，请稍后再试")
     user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credentials_exception
