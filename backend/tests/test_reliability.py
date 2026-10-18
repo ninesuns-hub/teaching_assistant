@@ -1,9 +1,12 @@
 import json
 import unittest
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
 import httpx
+import fitz
 from openai import APIStatusError, APITimeoutError
 from agent_core.react_agent import ReactAgent, ChatStreamError
 from agent_core.math_diagrams import validate_diagram
@@ -73,6 +76,20 @@ class ChatReliabilityTests(unittest.TestCase):
 
 
 class VisionReliabilityTests(unittest.TestCase):
+    def test_actual_png_file_is_encoded_after_validation(self):
+        from agent_core.skills.vision import analyze_uploaded_image
+        document = fitz.open()
+        page = document.new_page(width=100, height=100)
+        page.insert_text((10, 40), 'a -> b')
+        raw = page.get_pixmap().tobytes('png')
+        document.close()
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'graph.png'
+            image.write_bytes(raw)
+            with patch('agent_core.skills.vision.request_vision', return_value='a -> b') as request:
+                self.assertEqual(analyze_uploaded_image(str(image)), 'a -> b')
+            self.assertTrue(request.call_args.args[0].startswith('data:image/png;base64,'))
+
     def call(self, outcomes):
         client = MagicMock()
         client.chat.completions.create.side_effect = [
