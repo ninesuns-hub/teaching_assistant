@@ -256,7 +256,22 @@
   background: var(--color-disabled-bg);
 }
 
-.feedback-btn.is-loading svg {
+.feedback-btn--retry {
+  flex: 0 0 28px;
+}
+
+.feedback-btn--retry:hover:not(:disabled) {
+  transform: none;
+}
+
+.feedback-btn--retry svg {
+  display: block;
+  flex: 0 0 20px;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+.feedback-btn--retry.is-loading svg {
   animation: retry-spin 0.9s linear infinite;
 }
 
