@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getToken } from '../../api/httpClient'
+import { getToken, authenticatedFetch } from '../../api/httpClient'
 
 export function MessageActionIcon({ type }) {
   if (type === 'copy') return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" /></svg>
@@ -18,7 +18,7 @@ export function AuthImage({ path, previewUrl }) {
     const apiBase = import.meta.env.VITE_API_BASE_URL ?? ''
     const url = path.startsWith('http') ? path : `${apiBase}${path}`
     const token = getToken()
-    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    authenticatedFetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       .then((response) => { if (!response.ok) throw new Error('load failed'); return response.blob() })
       .then((blob) => { if (!cancelled) { objectUrl = URL.createObjectURL(blob); setSrc(objectUrl) } })
       .catch(() => { if (!cancelled) setSrc(null) })

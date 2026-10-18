@@ -1,4 +1,4 @@
-import { getToken, request } from './httpClient'
+import { getToken, request, authenticatedFetch } from './httpClient.js'
 
 export async function consumeChatStream(response, onEvent) {
   const reader = response.body.getReader()
@@ -6,6 +6,8 @@ export async function consumeChatStream(response, onEvent) {
   const isSseV1 = response.headers.get('X-Chat-Stream-Protocol') === 'sse-v1'
   let buffer = ''
   let donePayload = {}
+  let receivedDone = false
+  let streamError = null
 
   if (!isSseV1) {
     while (true) {
@@ -32,7 +34,8 @@ export async function consumeChatStream(response, onEvent) {
     } catch {
       payload = { message: dataLines.join('\n') }
     }
-    if (type === 'done') donePayload = payload
+    if (type === 'done') { donePayload = payload; receivedDone = true }
+    if (type === 'error') streamError = Object.assign(new Error(payload.message || '回答未完成，请重试'), { code: payload.code, requestId: payload.request_id })
     onEvent?.({ type, ...payload })
   }
 
@@ -45,13 +48,15 @@ export async function consumeChatStream(response, onEvent) {
     if (done) break
   }
   if (buffer.trim()) dispatchFrame(buffer)
+  if (streamError) throw streamError
+  if (!receivedDone) throw Object.assign(new Error('回答生成中断，请重试'), { code: 'STREAM_INCOMPLETE' })
   return donePayload
 }
 
 export async function retryChatAnswer(conversationId, messageId, onEvent) {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
   const token = getToken()
-  const response = await fetch(
+  const response = await authenticatedFetch(
     `${API_BASE_URL}/api/conversations/${conversationId}/messages/${messageId}/retry`,
     {
       method: 'POST',
@@ -74,7 +79,7 @@ export async function retryChatAnswer(conversationId, messageId, onEvent) {
 export async function sendChatMessage(payload, onEvent) {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
   const token = getToken()
-  const response = await fetch(`${API_BASE_URL}/api/chat`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -113,7 +118,7 @@ export async function sendWelcomeMessage(classId, onChunk, signal) {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
   const token = getToken()
   const query = classId ? `?class_id=${classId}` : ''
-  const response = await fetch(`${API_BASE_URL}/api/chat/welcome${query}`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/chat/welcome${query}`, {
     method: 'POST',
     signal,
     headers: {

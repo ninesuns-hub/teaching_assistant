@@ -3,6 +3,7 @@ import {
   getToken,
   request,
   uploadRequest,
+  authenticatedFetch,
 } from './httpClient'
 
 
@@ -28,7 +29,7 @@ export function deletePendingChatAttachment(attachmentId) {
 export async function fetchChatAttachmentFile(attachmentId, download = false) {
   const token = getToken()
   const query = download ? '?download=true' : ''
-  const response = await fetch(
+  const response = await authenticatedFetch(
     `${API_BASE_URL}/api/chat/attachments/${attachmentId}/file${query}`,
     {
       headers: token ? { Authorization: `Bearer ${token}` } : {},

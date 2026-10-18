@@ -31,3 +31,6 @@ export async function selectRole(role) {
 export async function getMe() {
   return request('/api/auth/me')
 }
+
+export const reportActivity = () => request('/api/auth/activity', { method: 'POST' })
+export const logout = () => request('/api/auth/logout', { method: 'POST' })

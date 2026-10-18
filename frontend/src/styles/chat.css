@@ -542,6 +542,29 @@
   overflow: auto;
 }
 
+.auth-expiry-notice {
+  position: relative;
+  z-index: 4;
+  padding: 10px 18px;
+  color: var(--color-text-primary);
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border-strong);
+  text-align: center;
+}
+
+.math-diagram-figure { margin: 14px 0; padding: 12px; border: 1px solid var(--color-border-strong); border-radius: 12px; background: var(--color-surface-2); }
+.math-diagram-scroll { overflow: auto; max-height: 65vh; }
+.math-diagram-svg { display: block; width: 100%; max-height: 600px; color: var(--color-text-primary); }
+.math-diagram-edge path { stroke: currentColor; stroke-width: 1.8; }
+.math-diagram-edge-label { fill: var(--color-text-primary); stroke: var(--color-surface-2); stroke-width: 5px; paint-order: stroke; font-size: 14px; }
+.math-diagram-node circle { fill: var(--color-surface-1); stroke: var(--color-accent); stroke-width: 2; }
+.math-diagram-node text { fill: var(--color-text-primary); font-weight: 650; }
+.math-diagram-figure figcaption { margin-top: 8px; color: var(--color-text-secondary); font-size: 14px; }
+.math-diagram-figure figcaption ul { margin: 0; }
+.math-stream-pending { color: var(--color-text-secondary); font-size: 13px; }
+.math-diagram-error { padding: 12px; color: var(--color-text-secondary); border: 1px solid var(--color-border-strong); border-radius: 10px; }
+.resume-answer-btn { display: block; margin-top: 10px; border: 1px solid currentColor; border-radius: 8px; padding: 6px 12px; color: inherit; background: transparent; cursor: pointer; }
+
 .mermaid-error {
   margin-bottom: 10px;
   color: var(--color-status-pending);

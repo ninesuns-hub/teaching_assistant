@@ -5,6 +5,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
 import { commitMermaidRepair, repairMermaidDiagram } from '../api/chat'
+import MathDiagram from './MathDiagram'
+import { prepareMathContent } from '../utils/mathContent'
 
 const MERMAID_SCENE_THEMES = {
   day: {
@@ -82,7 +84,11 @@ function renderMermaidDiagram(diagramId, chart, scene) {
         clusterBkg: themeVariables.tertiaryColor,
         clusterBorder: themeVariables.primaryBorderColor,
         ...themeVariables,
+        textColor: themeVariables.secondaryTextColor,
+        edgeLabelColor: themeVariables.secondaryTextColor,
+        darkMode: scene === 'night',
       },
+      themeCSS: `.edgeLabel, .edgeLabel span, .edgeLabel p { color: ${themeVariables.secondaryTextColor} !important; fill: ${themeVariables.secondaryTextColor} !important; }`,
     })
     return mermaid.render(diagramId, chart)
   })
@@ -311,9 +317,10 @@ function MarkdownCode({
   labels,
   ...props
 }) {
-  const languageMatch = /language-(\w+)/.exec(className || '')
+  const languageMatch = /language-([\w-]+)/.exec(className || '')
   const language = languageMatch?.[1]
   const code = String(children).replace(/\n$/, '')
+  if (!inline && language === 'math-diagram') return <MathDiagram source={code} />
 
   if (!inline && language === 'mermaid') {
     return (
@@ -339,54 +346,11 @@ function MarkdownPre({ children, ...props }) {
   const child = Children.toArray(children)[0]
   const className = isValidElement(child) ? child.props.className || '' : ''
 
-  if (/\blanguage-mermaid\b/.test(className)) {
+  if (/\blanguage-(mermaid|math-diagram)\b/.test(className)) {
     return <>{children}</>
   }
 
   return <pre {...props}>{children}</pre>
-}
-
-function normalizeMathContent(content) {
-  if (!content) return ''
-
-  // 先保护 fenced code（含 mermaid），避免被公式预处理破坏
-  const fences = []
-  let text = content.replace(/```[\s\S]*?```/g, (block) => {
-    const key = `@@FENCE_${fences.length}@@`
-    fences.push(block)
-    return key
-  })
-
-  text = text
-    // \( ... \) → $...$
-    .replace(/\\\(([\s\S]*?)\\\)/g, (_, expr) => `$${expr.trim()}$`)
-    // \[ ... \] → $$...$$
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_, expr) => `\n$$\n${expr.trim()}\n$$\n`)
-
-  // 修复矩阵行分隔：\begin{...}...\end{...} 内的 "\ " → \\
-  text = text.replace(
-    /(\\begin\{(?:bmatrix|pmatrix|vmatrix|Bmatrix|matrix|array)\}[\s\S]*?\\end\{(?:bmatrix|pmatrix|vmatrix|Bmatrix|matrix|array)\})/g,
-    (block) => block
-      .replace(/\\\s+(?=\d|\\|[a-zA-Z])/g, '\\\\ ')
-      .replace(/\\\n/g, '\\\\\n'),
-  )
-
-  // [ ...含 LaTeX 命令... ] → $$...$$（模型常误用方括号）
-  text = text.replace(
-    /\[\s*([^[\]]*(?:\\begin\{|\\boxed\{|\\frac\{|\\cdot|\\times|\\to|\\rightarrow)[^[\]]*?)\]/g,
-    (_, expr) => {
-      const trimmed = expr.trim()
-      if (!trimmed || trimmed.length > 2000) return `[${expr}]`
-      return `\n$$\n${trimmed}\n$$\n`
-    },
-  )
-
-  // 还原 code fence
-  fences.forEach((block, i) => {
-    text = text.replace(`@@FENCE_${i}@@`, block)
-  })
-
-  return text
 }
 
 function MarkdownMessage({
@@ -396,8 +360,10 @@ function MarkdownMessage({
   messageId = null,
   onContentUpdate = null,
   labels = {},
+  streaming = false,
 }) {
-  const normalized = useMemo(() => normalizeMathContent(content), [content])
+  const prepared = useMemo(() => prepareMathContent(content, streaming), [content, streaming])
+  const normalized = prepared.content
   const markdownComponents = useMemo(
     () => ({
       code: function SceneMarkdownCode(props) {
@@ -426,6 +392,7 @@ function MarkdownMessage({
       >
         {normalized}
       </ReactMarkdown>
+      {streaming && prepared.incomplete && <span className="math-stream-pending" role="status">正在生成…</span>}
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { retryChatAnswer, sendChatMessage, sendWelcomeMessage } from '../api/chat'
-import { sendCode, register, login, selectRole, getMe } from '../api/auth'
+import { sendCode, register, login, selectRole, getMe, logout } from '../api/auth'
+import useAuthSession from '../hooks/useAuthSession'
 import { fetchMyClasses, createClass, joinClass, fetchClassMaterials, uploadClassMaterial, deleteClassMaterial, fetchMaterialFile, fetchMaterialPreview } from '../api/classes'
 import { activateAnswerVariant, fetchConversations, fetchConversationMessages, deleteConversation, renameConversation, submitConversationFeedback } from '../api/conversations'
 import {
@@ -74,6 +75,8 @@ function mapConversationMessage(message) {
     previousVariantId: message.previous_variant_id || null,
     nextVariantId: message.next_variant_id || null,
     canRetry: Boolean(message.can_retry),
+    clientMessageId: message.client_message_id,
+    canResume: Boolean(message.can_resume),
   }
 }
 
@@ -256,7 +259,18 @@ function AppController() {
     () => classes.find(c => c.id === activeClassId) || null,
     [classes, activeClassId],
   )
-  const canChat = Boolean(user?.role && !user.needs_role_selection)
+  const { authReady, authNotice } = useAuthSession(user, () => {
+    setUser(null)
+    setMessages([])
+    setConversations([])
+    setClasses([])
+    setMaterials([])
+    setHomeworks([])
+    setActiveClassId(null)
+    setConversationId(null)
+    navigate('/chat', { replace: true })
+  }, profile => setUser(profile))
+  const canChat = Boolean(authReady && user?.role && !user.needs_role_selection)
   const exampleGroups = EXAMPLE_PROMPT_GROUPS[language]?.[user?.role] || []
   const visibleExamplePrompts = exampleGroups[exampleGroupIndex] || []
   const activeSection = location.pathname === '/resources'
@@ -723,7 +737,7 @@ function AppController() {
       is_admin: data.is_admin,
       status: data.status,
     }
-    setAuth(data.access_token, nextUser)
+    setAuth(data.access_token, nextUser, data)
     setUser(nextUser)
     resetConversationState({ clearWelcome: true })
     rememberChatPath('/chat', nextUser)
@@ -743,7 +757,7 @@ function AppController() {
       is_admin: data.is_admin,
       status: data.status,
     }
-    setAuth(getToken(), nextUser)
+    setAuth(getToken(), nextUser, data)
     setUser(nextUser)
     return nextUser
   }
@@ -823,7 +837,7 @@ function AppController() {
     try {
       const data = await selectRole(role)
       const nextUser = { ...user, role: data.role, needs_role_selection: false }
-      setAuth(data.access_token, nextUser)
+      setAuth(data.access_token, nextUser, data)
       setUser(nextUser)
       resetConversationState({ clearWelcome: true })
       rememberChatPath('/chat', nextUser)
@@ -838,6 +852,7 @@ function AppController() {
   }
 
   const handleLogout = () => {
+    if (getToken()) logout().catch(() => {})
     clearAuth()
     navigate('/chat', { replace: true })
     setUser(null)
@@ -1608,7 +1623,8 @@ function AppController() {
               retryDraft: `${message.retryDraft || ''}${event.delta || ''}`,
             }
           }
-          if (event.type === 'status' && !message.retryDraft) {
+          if (event.type === 'replace') return { ...message, retryDraft: event.content || '' }
+          if (event.type === 'status') {
             return { ...message, retryStatusStage: event.stage }
           }
           return message
@@ -1618,6 +1634,7 @@ function AppController() {
       await refreshConversationMessages(conversationId)
       await loadConversations()
     } catch (error) {
+      console.error('Retry answer failed', error)
       setMessages(current => current.map((message, index) => (
         index === messageIndex
           ? {
@@ -1682,18 +1699,19 @@ function AppController() {
     setExampleGroupIndex(current => (current + 1) % exampleGroups.length)
   }
 
-  const handleSend = async (e) => {
+  const handleSend = async (e, resumeMessage = null) => {
     e.preventDefault()
     if (!canChat) {
       if (!user) setAuthModal('login')
       else if (user.needs_role_selection) setRoleModalOpen(true)
       return
     }
-    if (pendingDocuments.some(item => item.status !== 'ready')) return
-    if ((!input.trim() && !pendingImage && !pendingDocuments.length) || isSending) return
+    if (!resumeMessage && pendingDocuments.some(item => item.status !== 'ready')) return
+    if ((!resumeMessage && !input.trim() && !pendingImage && !pendingDocuments.length) || isSending) return
 
     return runPendingAction('chat:send', async () => {
-    const text = input.trim()
+    const text = resumeMessage ? '' : input.trim()
+    const clientMessageId = resumeMessage?.clientMessageId || createClientMessageId()
     const displayText = text || (
       pendingImage && pendingDocuments.length
         ? language === 'zh' ? '[图片和文档]' : '[Image and documents]'
@@ -1706,19 +1724,27 @@ function AppController() {
       content: displayText,
       imagePreview: pendingImage?.previewUrl || null,
       attachments: pendingDocuments,
+      clientMessageId,
     }
-    const imagePayload = pendingImage
+    const imagePayload = !resumeMessage && pendingImage
       ? { image_base64: pendingImage.base64, image_mime: pendingImage.mime }
       : {}
     const attachmentPayload = {
-      attachment_ids: pendingDocuments.map(item => item.id),
+      attachment_ids: resumeMessage ? [] : pendingDocuments.map(item => item.id),
     }
 
     shouldAutoScrollRef.current = true
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
-    setPendingImage(null)
-    setPendingDocuments([])
+    if (resumeMessage) {
+      setMessages(prev => {
+        const index = prev.findIndex(item => item.clientMessageId === clientMessageId && item.role === 'user')
+        return index < 0 ? prev : prev.slice(0, index + 1)
+      })
+    } else {
+      setMessages(prev => [...prev, userMessage])
+      setInput('')
+      setPendingImage(null)
+      setPendingDocuments([])
+    }
     setIsSending(true)
 
     // 创建一个空的助手消息占位
@@ -1734,22 +1760,32 @@ function AppController() {
         message: text,
         conversation_id: conversationId,
         class_id: activeClassId,
-        client_message_id: createClientMessageId(),
+        client_message_id: clientMessageId,
         ...imagePayload,
         ...attachmentPayload,
       }, (event) => {
+        if (event.type === 'meta' && event.conversation_id) {
+          setConversationId(event.conversation_id)
+          rememberChatPath(`/chat/${event.conversation_id}`)
+          loadedConversationIdRef.current = event.conversation_id
+          if (location.pathname !== `/chat/${event.conversation_id}`) navigate(`/chat/${event.conversation_id}`, { replace: true })
+        }
         setMessages(prev => {
           const lastIndex = prev.length - 1
           if (lastIndex >= 0 && prev[lastIndex].role === 'assistant') {
             const newMessages = [...prev]
             const current = newMessages[lastIndex]
-            if (event.type === 'content') {
+            if (event.type === 'meta') {
+              newMessages[lastIndex - 1] = { ...newMessages[lastIndex - 1], id: event.user_message_id, canResume: true }
+            } else if (event.type === 'replace') {
+              newMessages[lastIndex] = { ...current, content: event.content || '' }
+            } else if (event.type === 'content') {
               newMessages[lastIndex] = {
                 ...current,
                 content: current.content + (event.delta || ''),
                 statusStage: null,
               }
-            } else if (event.type === 'status' && !current.content) {
+            } else if (event.type === 'status') {
               newMessages[lastIndex] = {
                 ...current,
                 statusStage: event.stage,
@@ -1764,7 +1800,7 @@ function AppController() {
             } else if (event.type === 'error') {
               newMessages[lastIndex] = {
                 ...current,
-                content: current.content || event.message || '抱歉，发生了错误，请稍后再试。',
+                generationError: event.message || '回答未完成，请重试',
                 statusStage: null,
               }
             }
@@ -1787,12 +1823,13 @@ function AppController() {
       }
     } catch (err) {
       console.error(err)
-      alert(err.message || '发送失败')
       setMessages(prev => {
         const newMessages = [...prev]
         const lastMsg = newMessages[newMessages.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.content = '抱歉，发生了错误，请稍后再试。'
+          newMessages[newMessages.length - 1] = { ...lastMsg, generationError: err.message || '回答未完成，请重试', statusStage: null }
+          const userIndex = newMessages.length - 2
+          if (userIndex >= 0) newMessages[userIndex] = { ...newMessages[userIndex], canResume: true }
         }
         return newMessages
       })
@@ -1933,6 +1970,7 @@ function AppController() {
 
       <main className="page" data-scene={activeSceneKey}>
         <SceneBackdrop scenes={SCENE_OPTIONS} opacities={sceneOpacities} />
+        {authNotice && !user && <div className="auth-expiry-notice" role="status">{language === 'zh' ? '登录已过期，请重新登录' : 'Your session expired. Please sign in again.'}</div>}
 
         <Topbar
           t={t}
